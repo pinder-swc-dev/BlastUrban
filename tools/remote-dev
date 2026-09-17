@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# Develop locally and build/run blastFoam on a Linux compute server.
+set -Eeuo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_dir=$(cd -- "$script_dir/.." && pwd)
+config_file=${REMOTE_DEV_CONFIG:-"$repo_dir/.remote.env"}
+exclude_file="$script_dir/remote-rsync-excludes.txt"
+
+usage() {
+    cat <<'EOF'
+Usage: tools/remote-dev <command> [arguments]
+
+Commands:
+  check                         Check SSH and the remote OpenFOAM environment
+  sync                          Copy source/case inputs to the server (no delete)
+  sync-dry-run                  Preview files that sync would transfer
+  build                         Build blastFoam on the server
+  exec -- COMMAND [ARG ...]     Run a command from the remote repository root
+  case CASE -- COMMAND [ARG ...]
+                                Run a command from a case directory
+  shell                         Open an interactive shell in the remote repo
+  fetch REMOTE_PATH LOCAL_DIR   Copy a selected remote file/directory back
+
+Configuration defaults to .remote.env. Override it with REMOTE_DEV_CONFIG.
+See docs/REMOTE_DEVELOPMENT_TH.md for setup and examples.
+EOF
+}
+
+die() {
+    printf 'remote-dev: %s\n' "$*" >&2
+    exit 1
+}
+
+command_name=${1:-help}
+case "$command_name" in
+    help|-h|--help)
+        usage
+        exit 0
+        ;;
+esac
+shift
+
+[[ -f "$config_file" ]] || die "ไม่พบ $config_file (คัดลอก .remote.env.example เป็น .remote.env ก่อน)"
+# shellcheck disable=SC1090
+source "$config_file"
+
+: "${REMOTE_HOST:?Set REMOTE_HOST in $config_file}"
+: "${REMOTE_DIR:?Set REMOTE_DIR in $config_file}"
+: "${REMOTE_OPENFOAM_BASHRC:?Set REMOTE_OPENFOAM_BASHRC in $config_file}"
+REMOTE_BUILD_JOBS=${REMOTE_BUILD_JOBS:-8}
+REMOTE_PORT=${REMOTE_PORT:-}
+REMOTE_IDENTITY_FILE=${REMOTE_IDENTITY_FILE:-}
+
+[[ "$REMOTE_DIR" == /* ]] || die "REMOTE_DIR ต้องเป็น absolute path"
+[[ "$REMOTE_OPENFOAM_BASHRC" == /* ]] || die "REMOTE_OPENFOAM_BASHRC ต้องเป็น absolute path"
+[[ "$REMOTE_BUILD_JOBS" =~ ^[1-9][0-9]*$ ]] || die "REMOTE_BUILD_JOBS ต้องเป็นจำนวนเต็มบวก"
+
+ssh_args=(-o BatchMode=yes -o ConnectTimeout=10)
+rsync_ssh=(ssh -o BatchMode=yes -o ConnectTimeout=10)
+if [[ -n "$REMOTE_PORT" ]]; then
+    [[ "$REMOTE_PORT" =~ ^[1-9][0-9]*$ ]] || die "REMOTE_PORT ไม่ถูกต้อง"
+    ssh_args+=(-p "$REMOTE_PORT")
+    rsync_ssh+=(-p "$REMOTE_PORT")
+fi
+if [[ -n "$REMOTE_IDENTITY_FILE" ]]; then
+    ssh_args+=(-i "$REMOTE_IDENTITY_FILE")
+    rsync_ssh+=(-i "$REMOTE_IDENTITY_FILE")
+fi
+printf -v rsync_shell '%q ' "${rsync_ssh[@]}"
+rsync_shell=${rsync_shell% }
+
+quote_command() {
+    local quoted arg
+    quoted=''
+    for arg in "$@"; do
+        printf -v arg '%q' "$arg"
+        quoted+="${quoted:+ }$arg"
+    done
+    printf '%s' "$quoted"
+}
+
+ssh_script() {
+    local command
+    command=$(quote_command bash -s -- "$@")
+    ssh "${ssh_args[@]}" "$REMOTE_HOST" "$command"
+}
+
+validate_relative_path() {
+    local path=$1
+    [[ -n "$path" && "$path" != /* && "/$path/" != *"/../"* && "$path" != '..' ]] \
+        || die "path ต้องเป็น relative path ภายใน repository และห้ามมี .."
+}
+
+remote_exec() {
+    local cwd=$1
+    shift
+    [[ $# -gt 0 ]] || die "ไม่มี command ให้รัน"
+    ssh_script "$REMOTE_DIR" "$REMOTE_OPENFOAM_BASHRC" "$cwd" "$@" <<'REMOTE_SCRIPT'
+set -Eeuo pipefail
+repo=$1
+openfoam_bashrc=$2
+relative_cwd=$3
+shift 3
+
+[[ -d "$repo" ]] || { printf 'Remote repository not found: %s\n' "$repo" >&2; exit 1; }
+[[ -f "$openfoam_bashrc" ]] || { printf 'OpenFOAM bashrc not found: %s\n' "$openfoam_bashrc" >&2; exit 1; }
+[[ -d "$repo/$relative_cwd" ]] || { printf 'Remote working directory not found: %s\n' "$repo/$relative_cwd" >&2; exit 1; }
+
+# OpenFOAM/blastFoam startup files commonly inspect unset variables.
+set +u
+source "$openfoam_bashrc"
+source "$repo/etc/bashrc"
+set -u
+cd "$repo/$relative_cwd"
+exec "$@"
+REMOTE_SCRIPT
+}
+
+sync_repo() {
+    local dry_run=${1:-0}
+    local mkdir_command
+    mkdir_command=$(quote_command mkdir -p -- "$REMOTE_DIR")
+    ssh "${ssh_args[@]}" "$REMOTE_HOST" "$mkdir_command"
+
+    local rsync_args=(
+        -az
+        --human-readable
+        --itemize-changes
+        --exclude-from="$exclude_file"
+        -e "$rsync_shell"
+    )
+    [[ "$dry_run" == 1 ]] && rsync_args+=(--dry-run --stats)
+    rsync "${rsync_args[@]}" "$repo_dir/" "$REMOTE_HOST:$REMOTE_DIR/"
+}
+
+case "$command_name" in
+    check)
+        ssh_script "$REMOTE_DIR" "$REMOTE_OPENFOAM_BASHRC" <<'REMOTE_SCRIPT'
+set -Eeuo pipefail
+repo=$1
+openfoam_bashrc=$2
+printf 'Host: '; hostname
+printf 'Repository: %s\n' "$repo"
+[[ -d "$repo" ]] || { echo 'Repository: MISSING'; exit 1; }
+[[ -f "$openfoam_bashrc" ]] || { printf 'OpenFOAM bashrc: MISSING (%s)\n' "$openfoam_bashrc"; exit 1; }
+set +u
+source "$openfoam_bashrc"
+source "$repo/etc/bashrc"
+set -u
+printf 'WM_PROJECT_VERSION: %s\n' "${WM_PROJECT_VERSION:-unknown}"
+printf 'WM_OPTIONS: %s\n' "${WM_OPTIONS:-unknown}"
+printf 'blastFoam: '
+command -v blastFoam || echo 'not built yet'
+printf 'MPI: '
+command -v mpirun || echo 'not found'
+printf 'CPU threads: '
+getconf _NPROCESSORS_ONLN 2>/dev/null || echo 'unknown'
+printf 'Free space: '
+df -hP "$repo" | awk 'NR == 2 { print $4 }'
+REMOTE_SCRIPT
+        ;;
+    sync)
+        sync_repo 0
+        ;;
+    sync-dry-run)
+        sync_repo 1
+        ;;
+    build)
+        remote_exec . ./Allwmake -j "$REMOTE_BUILD_JOBS"
+        ;;
+    exec)
+        [[ ${1:-} == -- ]] && shift
+        remote_exec . "$@"
+        ;;
+    case)
+        case_path=${1:-}
+        [[ -n "$case_path" ]] || die "ระบุ CASE เช่น tutorials/blastFoam/building3DWorkshop/townRun"
+        validate_relative_path "$case_path"
+        shift
+        [[ ${1:-} == -- ]] && shift
+        remote_exec "$case_path" "$@"
+        ;;
+    shell)
+        printf -v setup 'set +u; source %q; source %q/etc/bashrc; cd %q; exec bash -i' \
+            "$REMOTE_OPENFOAM_BASHRC" "$REMOTE_DIR" "$REMOTE_DIR"
+        ssh -t "${ssh_args[@]}" "$REMOTE_HOST" "bash -lc $(quote_command "$setup")"
+        ;;
+    fetch)
+        remote_path=${1:-}
+        local_dir=${2:-}
+        [[ -n "$remote_path" && -n "$local_dir" ]] || die "ใช้: remote-dev fetch REMOTE_PATH LOCAL_DIR"
+        validate_relative_path "$remote_path"
+        mkdir -p -- "$local_dir"
+        rsync -az --human-readable --info=progress2 -e "$rsync_shell" \
+            "$REMOTE_HOST:$REMOTE_DIR/$remote_path" "$local_dir/"
+        ;;
+    *)
+        usage >&2
+        die "ไม่รู้จัก command: $command_name"
+        ;;
+esac

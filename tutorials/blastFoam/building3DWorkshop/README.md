@@ -1,8 +1,19 @@
 # Building 3-D Workshop Tutorial
 
+The configuration in this directory now targets the repaired
+`townBuildings.stl` model derived from `building3DWorkshopTest/towntest.stl`.
+See [TOWN_SETUP.md](TOWN_SETUP.md) for the Domain, charge, mesh, and sampling
+changes. This repository contains source and case inputs only; generated mesh,
+logs, processor directories, VTK files, and HTML visualisations are excluded.
+Use `./prepareTownRun.sh` to create a fresh `townRun` case, or use `townDemo`
+for the smaller demonstration configuration, then generate all runtime output
+on the calculation server.
+
 ## Notes
 
-This was the example case used throughout the May 13th, 2020 blastFoam workshop (thank you to everyone who attended!). This case is designed to show a simple 3-D case setup using an STL file with snappyHexMesh and adaptive mesh refinement. A c-4 charge placed inside a L-Shaped building, and the c-4 is activated using the linear activation model.
+The notes below describe the earlier L-shaped workshop example from May
+13th, 2020. That example demonstrates STL meshing, adaptive refinement and
+C4 initiation; its runtime estimate does not apply to the imported town.
 
 The case takes approximately 5 min to run on a four-core desktop. Some additional notes:
 
@@ -54,5 +65,3 @@ functions
 ```
 
 During/after running the simulation, results will be in the ```postProcessing``` directory.
-
-

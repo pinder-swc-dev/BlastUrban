@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blastFoam 3D | Air blast and surface fields</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #09131f; color: #e7f1fb; }
+  header { padding: 14px 20px 10px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 21px; margin: 0; font-weight: 650; }
+  header p { margin: 0; color: #9ab3c9; font-size: 13px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 12px; padding: 0 12px 12px; }
+  .stage { position: relative; min-height: 620px; border: 1px solid #24405a; border-radius: 12px; overflow: hidden; background: #0b1a2a; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .badge { position: absolute; top: 12px; left: 12px; padding: 7px 10px; border-radius: 7px; background: #07131ed9; color: #b8d9f2; font-size: 13px; pointer-events: none; }
+  .panel { padding: 16px; border: 1px solid #24405a; border-radius: 12px; background: #102237; }
+  label { display: block; font-size: 13px; color: #c4d8e8; margin: 0 0 6px; }
+  select, input, button { font: inherit; background: #182e46; color: #e7f1fb; border: 1px solid #395d7b; border-radius: 7px; padding: 8px; }
+  select, input[type=range] { width: 100%; }
+  button { cursor: pointer; min-width: 70px; }
+  button:hover { background: #254462; }
+  .group { margin-bottom: 20px; }
+  .check { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .check input { accent-color: #70d5ff; }
+  .row { display: flex; gap: 7px; align-items: center; }
+  .row input[type=number] { min-width: 0; width: 50%; }
+  .value { color: #78d6ff; font-size: 19px; font-weight: 650; margin: 5px 0 12px; }
+  .legend { height: 12px; border-radius: 6px; background: linear-gradient(90deg,#1854aa,#37c8ef,#ffe565,#fb823a,#d42843); }
+  .scale { display: flex; justify-content: space-between; color: #a5bdd0; font-size: 12px; margin-top: 6px; }
+  .note { color: #a5bdd0; font-size: 12px; line-height: 1.55; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } .stage { min-height: 460px; } }
+</style>
+</head>
+<body>
+<header><h1>Air blast 3D</h1><p id="modelLabel"></p><p>ผิวคลื่นระเบิด + ค่า overpressure และ temperature บนผนัง</p></header>
+<main>
+  <div class="stage"><canvas id="scene" aria-label="3D air blast visualization"></canvas><div class="badge">ลากเพื่อหมุน · เลื่อนล้อเพื่อซูม</div></div>
+  <aside class="panel">
+    <div class="group computedOnly" id="focusGroup" hidden><label for="focus">มุมมอง</label><select id="focus"><option value="blast">บริเวณระเบิด</option><option value="town">เมืองทั้งหมด</option></select></div>
+    <div class="group computedOnly"><label for="field">สีบนพื้นผิวผนัง</label><select id="field"><option value="op">Overpressure ขณะนั้น (kPa)</option><option value="opMax">Peak overpressure (kPa)</option><option value="temp">Air temperature ใกล้ผนัง (K)</option></select></div>
+    <div class="group"><label>Surface with Edges</label><label class="check"><input id="wallEdges" type="checkbox" checked>ขอบผิวอาคาร</label><label class="check"><input id="waveEdges" type="checkbox" checked>ขอบผิวคลื่นระเบิด</label></div>
+    <div class="group computedOnly"><label for="time">เวลาจำลอง</label><div class="value" id="timeValue"></div><input id="time" type="range" min="0" value="0" step="1"><div class="row"><button id="play">เล่น</button><button id="reset">รีเซ็ตมุม</button></div></div>
+    <div class="group computedOnly" id="statsGroup" hidden><label>ค่าสูงสุดจาก patch ผนังทั้งหมด</label><div class="note" id="surfaceStats"></div></div>
+    <div class="group computedOnly"><label>ช่วงสีที่แสดง</label><div class="row"><input id="minimum" type="number" step="any" aria-label="minimum"><input id="maximum" type="number" step="any" aria-label="maximum"></div><div class="legend"></div><div class="scale"><span id="minLabel"></span><span id="maxLabel"></span></div></div>
+    <div class="group" id="previewReset" hidden><button id="resetPreview">รีเซ็ตมุม</button></div>
+    <p class="note" id="description">เปลือกสีฟ้าคือ isosurface ของความดัน 110 kPa จากผลจำลอง ไม่ใช่ควันจริง สีผนังใช้ค่าของอากาศที่ขอบผนัง อุณหภูมิเนื้อวัสดุผนังต้องใช้แบบจำลองความร้อนในของแข็ง</p>
+  </aside>
+</main>
+<script>
+const data = __BLAST_DATA__;
+document.getElementById('modelLabel').textContent = data.model;
+if (data.blastCenter) document.getElementById('focusGroup').hidden = false;
+if (data.frames[0].stats) document.getElementById('statsGroup').hidden = false;
+if (data.preview) {
+  document.querySelectorAll('.computedOnly').forEach(element => element.hidden = true);
+  document.getElementById('previewReset').hidden = false;
+  document.getElementById('description').textContent = 'สีเทาคืออาคารที่ซ่อมแล้ว กรอบสีเหลืองคือ Domain ของ mesh ภาพนี้ยังไม่มีผล overpressure หรือ temperature; ต้องรัน solver เคสเมืองก่อนจึงจะได้ค่าบนผิว';
+}
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d', {alpha: false});
+const controls = {
+  field: document.getElementById('field'), time: document.getElementById('time'),
+  wallEdges: document.getElementById('wallEdges'), waveEdges: document.getElementById('waveEdges'),
+  min: document.getElementById('minimum'), max: document.getElementById('maximum'),
+  timeValue: document.getElementById('timeValue'), minLabel: document.getElementById('minLabel'),
+  maxLabel: document.getElementById('maxLabel'), play: document.getElementById('play')
+};
+controls.time.max = data.frames.length - 1;
+const defaults = data.ranges || {op: [0, 100], opMax: [0, 200], temp: [300, 1500]};
+let yaw = -0.65, pitch = 0.72, zoom = 1, dragging = false, lastX = 0, lastY = 0, timer = null;
+let viewCenter = data.blastCenter || data.center, viewRadius = data.blastRadius || data.radius;
+const stops = [[24,84,170],[55,200,239],[255,229,101],[251,130,58],[212,40,67]];
+
+function palette(value, low, high, light=1) {
+  const t = Math.max(0, Math.min(1, (value-low) / Math.max(high-low, 1e-9))) * 4;
+  const index = Math.min(3, Math.floor(t)), a = t-index;
+  return stops[index].map((n, j) => Math.round((n*(1-a)+stops[index+1][j]*a)*light));
+}
+function resize() {
+  const rect = canvas.getBoundingClientRect(), ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * ratio); canvas.height = Math.round(rect.height * ratio);
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0); render();
+}
+function project(point, width, height) {
+  const dx = point[0]-viewCenter[0], dy = point[1]-viewCenter[1], dz = point[2]-viewCenter[2];
+  const x = Math.cos(yaw)*dx - Math.sin(yaw)*dy;
+  const y = Math.sin(yaw)*dx + Math.cos(yaw)*dy;
+  const vertical = Math.cos(pitch)*dz - Math.sin(pitch)*y;
+  const depth = Math.cos(pitch)*y + Math.sin(pitch)*dz;
+  const distance = viewRadius*3.4, denom = distance-depth;
+  if (denom < 0.1) return null;
+  const scale = Math.min(width,height)*0.39*zoom/viewRadius*distance/denom;
+  return {x: width*0.51 + x*scale, y: height*0.55 - vertical*scale, depth};
+}
+function grid(width, height) {
+  const z = data.bounds[4], step = Math.max(0.5, Math.round(viewRadius/4*2)/2);
+  const extent = Math.ceil(viewRadius/step)*step;
+  ctx.strokeStyle = '#2e4960'; ctx.lineWidth = 1;
+  for (let i=-extent; i<=extent+1e-9; i+=step) {
+    for (const ends of [
+      [[viewCenter[0]+i,viewCenter[1]-extent,z],[viewCenter[0]+i,viewCenter[1]+extent,z]],
+      [[viewCenter[0]-extent,viewCenter[1]+i,z],[viewCenter[0]+extent,viewCenter[1]+i,z]]
+    ]) {
+      const a=project(ends[0],width,height), b=project(ends[1],width,height);
+      if (a&&b) { ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
+    }
+  }
+}
+function drawDomain(width, height) {
+  if (!data.domain) return;
+  const [xmin,xmax,ymin,ymax,zmin,zmax]=data.domain;
+  const corners=[[xmin,ymin,zmin],[xmax,ymin,zmin],[xmax,ymax,zmin],[xmin,ymax,zmin],
+                 [xmin,ymin,zmax],[xmax,ymin,zmax],[xmax,ymax,zmax],[xmin,ymax,zmax]];
+  const projected=corners.map(p=>project(p,width,height));
+  const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  ctx.strokeStyle='rgba(255,198,85,0.75)'; ctx.lineWidth=1.5;
+  for (const [i,j] of edges) {
+    const a=projected[i],b=projected[j]; if (!a||!b) continue;
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  }
+}
+function addTriangles(items, mesh, isWave, field, low, high, width, height) {
+  const projected = mesh.points.map(p => project(p,width,height));
+  for (let i=0; i<mesh.faces.length; i++) {
+    const ids=mesh.faces[i], a=projected[ids[0]], b=projected[ids[1]], c=projected[ids[2]];
+    if (!a||!b||!c) continue;
+    if (Math.max(a.x,b.x,c.x)<0||Math.min(a.x,b.x,c.x)>width||Math.max(a.y,b.y,c.y)<0||Math.min(a.y,b.y,c.y)>height) continue;
+    let fill;
+    if (isWave) fill='rgba(80,211,255,0.24)';
+    else if (data.preview) fill='rgb(151,183,201)';
+    else {
+      const p=mesh.points[ids[0]], q=mesh.points[ids[1]], r=mesh.points[ids[2]];
+      const u=[q[0]-p[0],q[1]-p[1],q[2]-p[2]], v=[r[0]-p[0],r[1]-p[1],r[2]-p[2]];
+      const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+      const length=Math.hypot(...n)||1;
+      const light=0.55+0.45*Math.abs((n[0]*-0.4+n[1]*-0.3+n[2]*0.85)/length);
+      const rgb=palette(mesh[field][i],low,high,light);
+      fill=`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    }
+    items.push({a,b,c,fill,isWave,depth:(a.depth+b.depth+c.depth)/3});
+  }
+}
+function render() {
+  const width=canvas.clientWidth, height=canvas.clientHeight;
+  if (!width||!height) return;
+  ctx.fillStyle='#0b1a2a'; ctx.fillRect(0,0,width,height);
+  grid(width,height);
+  const frame=data.frames[Number(controls.time.value)], field=controls.field.value;
+  const low=Number(controls.min.value), high=Number(controls.max.value);
+  const items=[];
+  addTriangles(items,frame.wave,true,field,low,high,width,height);
+  addTriangles(items,frame.wall,false,field,low,high,width,height);
+  items.sort((a,b)=>a.depth-b.depth);
+  for (const t of items) {
+    ctx.beginPath(); ctx.moveTo(t.a.x,t.a.y); ctx.lineTo(t.b.x,t.b.y); ctx.lineTo(t.c.x,t.c.y); ctx.closePath();
+    ctx.fillStyle=t.fill; ctx.fill();
+    if (t.isWave ? controls.waveEdges.checked : controls.wallEdges.checked) {
+      ctx.strokeStyle=t.isWave ? 'rgba(175,237,255,0.25)' : 'rgba(6,22,35,0.55)';
+      ctx.lineWidth=t.isWave ? 0.5 : 0.7;
+      ctx.stroke();
+    }
+  }
+  drawDomain(width,height);
+  controls.timeValue.textContent=`${(frame.time*1000).toFixed(2)} ms`;
+  if (frame.stats) document.getElementById('surfaceStats').textContent=`Overpressure ${frame.stats.op.toLocaleString()} kPa · Peak ${frame.stats.opMax.toLocaleString()} kPa · T ${frame.stats.temp.toLocaleString()} K · ผิวคลื่น 110 kPa ไกลสุด ${frame.stats.waveRadius.toLocaleString()} m`;
+  controls.minLabel.textContent=low; controls.maxLabel.textContent=high;
+}
+function fieldChanged() {
+  const range=defaults[controls.field.value];
+  controls.min.value=range[0]; controls.max.value=range[1]; render();
+}
+controls.field.addEventListener('change',fieldChanged);
+document.getElementById('focus').addEventListener('change',e=>{
+  const blast=e.target.value==='blast';
+  viewCenter=blast?data.blastCenter:data.center;
+  viewRadius=blast?data.blastRadius:data.radius;
+  zoom=1; render();
+});
+controls.wallEdges.addEventListener('change',render);
+controls.waveEdges.addEventListener('change',render);
+controls.time.addEventListener('input',render);
+controls.min.addEventListener('input',render);
+controls.max.addEventListener('input',render);
+controls.play.addEventListener('click',()=>{
+  if (timer) { clearInterval(timer); timer=null; controls.play.textContent='เล่น'; return; }
+  controls.play.textContent='หยุด';
+  timer=setInterval(()=>{ controls.time.value=(Number(controls.time.value)+1)%data.frames.length; render(); },300);
+});
+document.getElementById('reset').addEventListener('click',()=>{yaw=-0.65;pitch=0.72;zoom=1;render();});
+document.getElementById('resetPreview').addEventListener('click',()=>{yaw=-0.65;pitch=0.72;zoom=1;render();});
+canvas.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{
+  if (!dragging) return;
+  yaw+=(e.clientX-lastX)*0.008;
+  pitch=Math.max(0.15,Math.min(1.4,pitch+(e.clientY-lastY)*0.008));
+  lastX=e.clientX;lastY=e.clientY;render();
+});
+canvas.addEventListener('pointerup',()=>{dragging=false;});
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(0.4,Math.min(3,zoom*Math.exp(-e.deltaY*0.001)));render();},{passive:false});
+window.addEventListener('resize',resize);
+fieldChanged(); resize();
+</script>
+</body>
+</html>

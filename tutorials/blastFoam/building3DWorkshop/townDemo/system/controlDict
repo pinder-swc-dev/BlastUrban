@@ -1,0 +1,174 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2.3.0                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     blastFoam;
+
+startFrom       startTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         0.0025;
+
+deltaT          5e-8;
+
+writeControl    adjustableRunTime;
+
+writeInterval   2.5e-5;
+
+cycleWrite      0;
+
+writeFormat     binary;
+
+writePrecision  6;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   12;
+
+runTimeModifiable true;
+
+adjustTimeStep  yes;
+
+maxCo           0.3;
+
+maxDeltaT       3e-6;
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+functions
+{
+    impulse
+    {
+        type                impulse;
+
+        writeControl        writeTime;
+        pRef                101298;
+    }
+    overpressure
+    {
+        type                overpressure;
+
+        writeControl        writeTime;
+        store               yes;
+        pRef                101298;
+    }
+    maxPImpulse
+    {
+        type                fieldMinMax;
+
+        writeControl        writeTime;
+        fields
+        (
+            overpressure
+            impulse
+        );
+    }
+
+    surfaces
+    {
+        type                surfaces;
+        writeControl        adjustableRunTime;
+        writeInterval       2.5e-5;
+        interpolate         false;
+        interpolationScheme cellPointFace;
+        surfaceFormat       vtkTimeSeries;
+        fields ( p overpressure overpressureMax T );
+        surfaces
+        (
+            ground
+            {
+                type        patch;
+                patches     (ground);
+                triangulate false;
+            }
+            walls
+            {
+                type        patch;
+                patches     (walls);
+                triangulate false;
+            }
+            pContours
+            {
+                type        isoSurface;
+                isoField    p;
+                isoValues   (1.1e5);
+            }
+            zNormal
+            {
+                type        cuttingPlane;
+                planeType   pointAndNormal;
+                pointAndNormalDict
+                {
+                    point   (35 23 1);
+                    normal  (0 0 1);
+                }
+                interpolate true;
+            }
+            yNormal
+            {
+                type        cuttingPlane;
+                planeType   pointAndNormal;
+                pointAndNormalDict
+                {
+                    point   (35 23 1);
+                    normal  (0 1 0);
+                }
+                interpolate true;
+            }
+            xNormal
+            {
+                type        cuttingPlane;
+                planeType   pointAndNormal;
+                pointAndNormalDict
+                {
+                    point   (35 23 1);
+                    normal  (1 0 0);
+                }
+                interpolate true;
+            }
+        );
+    }
+
+    pressureProbes
+    {
+        type                blastProbes;
+        writeControl        timeStep;
+        writeInterval       1;
+        adjustLocations     yes;
+        append yes;
+        probeLocations
+        (
+            // probe locations in ( x y z ) format
+            // unlimited number -- needs to be inside the domain!
+            (35 18 1)       // Open street south of the charge
+            (40 23 1)       // Open street east of the charge
+            (35 25 1)       // Near a building face, in the air
+            // etc.
+        );
+        fields
+        (
+            p
+        );
+    }
+};
+
+
+// ************************************************************************* //

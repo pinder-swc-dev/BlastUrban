@@ -91,3 +91,31 @@ doc/Doxygen/DTAGS
 
 # Ignore the test directory
 /tutorialsTest
+
+# Local remote-development settings (may contain hostnames and user names)
+/.remote.env
+/server-results/
+
+# OpenFOAM runtime/build products. Keep case inputs such as 0/, constant/,
+# system/, Allrun, and Allclean under version control.
+**/processor[0-9]*/
+**/postProcessing/
+**/VTK/
+**/log.*
+**/*.foam
+**/constant/polyMesh/
+**/constant/extendedFeatureEdgeMesh/
+**/*.eMesh
+
+# Generated blast visualisation and transfer artefacts
+**/blast3D*.html
+**/*.surfaceStats.csv
+**/*MeshPreview.html
+**/*.gltf
+*.tar.gz.sha256
+**/__pycache__/
+**/*.pyc
+
+# Generated copies and rendered documentation
+/tutorials/blastFoam/building3DWorkshop/townRun/
+/tutorials/blastFoam/docs/openfoam-blastfoam/*.pdf

@@ -15,7 +15,7 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 castellatedMesh on;
-snap            off;
+snap            on;
 addLayers       off;
 
 geometry
@@ -23,8 +23,8 @@ geometry
     walls
     {
         type triSurfaceMesh;
-        file "L_Wall.stl";
-        scale 0.001;
+        file "townBuildings.stl";
+        scale 1;
     }
 };
 
@@ -36,14 +36,14 @@ castellatedMeshControls
     // If local number of cells is >= maxLocalCells on any processor
     // switches from from refinement followed by balancing
     // (current method) to (weighted) balancing before refinement.
-    maxLocalCells 10000000;
+    maxLocalCells 1000000;
 
     // Overall cell limit (approximately). Refinement will stop immediately
     // upon reaching this number so a refinement level might not complete.
     // Note that this is the number of cells before removing the part which
     // is not 'visible' from the keepPoint. The final number of cells might
     // actually be a lot less.
-    maxGlobalCells 200000000;
+    maxGlobalCells 3000000;
 
     // The surface refinement loop might spend lots of iterations refining just a
     // few cells. This setting will cause refinement to stop if <= minimumRefine
@@ -64,8 +64,8 @@ castellatedMeshControls
     features
     (
         {
-            file  "L_Wall.extendedFeatureEdgeMesh";
-            level 0;
+            file  "townBuildings.extendedFeatureEdgeMesh";
+            level 2;
         }
     );
 
@@ -73,7 +73,7 @@ castellatedMeshControls
     {
         walls
         {
-            level (0 0);
+            level (2 3);
             patchInfo { type wall; }
         }
     }
@@ -83,7 +83,7 @@ castellatedMeshControls
     {
     }
 
-    locationInMesh (0 0 0.5);
+    locationInMesh (35 20 1); // Open street, about 4 m from the nearest building
 }
 
 snapControls

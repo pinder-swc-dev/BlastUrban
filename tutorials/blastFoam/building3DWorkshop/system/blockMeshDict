@@ -18,19 +18,19 @@ convertToMeters 1;
 
 vertices
 (
-    ( -5.0 -5.0     0.0) // bottom
-    (  5.0 -5.0     0.0)
-    (  5.0  5.0     0.0)
-    ( -5.0  5.0     0.0)
-    ( -5.0 -5.0     5.0) // top
-    (  5.0 -5.0     5.0)
-    (  5.0  5.0     5.0)
-    ( -5.0  5.0     5.0)
+    (-20 -20  0) // 20 m buffer around the town footprint
+    ( 90 -20  0)
+    ( 90  95  0)
+    (-20  95  0)
+    (-20 -20 55) // 20.8 m above the highest roof
+    ( 90 -20 55)
+    ( 90  95 55)
+    (-20  95 55)
 );
 
 blocks
 (
-	 hex (0 1 2 3 4 5 6 7) (25 25 10) simpleGrading (1 1 1)
+	 hex (0 1 2 3 4 5 6 7) (55 58 28) simpleGrading (1 1 1)
 );
 
 edges

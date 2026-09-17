@@ -1,0 +1,39 @@
+# Repository metadata belongs to the local Git working copy.
+/.git/
+/.remote.env
+/server-results/
+
+# Local/editor/cache files.
+**/.DS_Store
+**/.vscode/
+**/__pycache__/
+**/*.pyc
+**/*~
+**/*.swp
+
+# Compiled output can be rebuilt on the server.
+/bin/
+/lib/
+**/lnInclude/
+**/platforms/
+
+# OpenFOAM runtime output. Input directories 0/, constant/, and system/ are
+# deliberately NOT excluded.
+**/processor[0-9]*/
+**/postProcessing/
+**/VTK/
+**/log.*
+**/*.foam
+**/constant/polyMesh/
+**/constant/extendedFeatureEdgeMesh/
+**/*.eMesh
+
+# Large generated visualisation/archive files.
+**/blast3D*.html
+**/*.surfaceStats.csv
+**/*MeshPreview.html
+**/*.gltf
+**/*.tar
+**/*.tar.gz
+**/*.tgz
+**/*.zip

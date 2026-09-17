@@ -7,7 +7,9 @@
 
 
 
-# blastFoam Version 6.0
+# BlastUrban
+
+Urban blast simulation source and case inputs based on blastFoam Version 6.0.
 
 blastFoam is a library for single and multiphase compressible flow with application to high-explosive detonation, explosive safety and airblast, as well as general compressible flows. blastFoam is developed by [Synthetik Applied Technologies](https://www.synthetik-technologies.com). This offering is not approved or endorsed by OpenCFD Limited, producer and distributor of the OpenFOAM software via www.openfoam.com, and owner of the OPENFOAM<img alt="$\textregistered$" src="svgs/6abda71802c3922eebfcf1b67d5169b2.png" align="middle" width="16.438455000000005pt" height="22.831379999999992pt"/>  and OpenCFD<img alt="$\textregistered$" src="svgs/6abda71802c3922eebfcf1b67d5169b2.png" align="middle" width="16.438455000000005pt" height="22.831379999999992pt"/> trade marks.
 
@@ -15,6 +17,11 @@ blastFoam is a library for single and multiphase compressible flow with applicat
 ## How to use blastFoam
 
 Several validation and tutorial cases are included in the repository, and are documented in the [blastFoam User Guide](BlastFoam_User_Guide.pdf).
+
+To edit on a workstation while compiling and running cases on a Linux server,
+see the [remote development guide (Thai)](docs/REMOTE_DEVELOPMENT_TH.md). The
+included `tools/remote-dev` helper synchronizes source and case inputs without
+copying OpenFOAM runtime output.
 
 
 ### blastFoam workshop | Date: July 14, 2020 | Location: Virtual/Online | Cost: Free

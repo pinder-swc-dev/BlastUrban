@@ -16,7 +16,7 @@ FoamFile
 
 surfaces
 (
-    "L_Wall.stl"
+    "townBuildings.stl"
 );
 
 // Identify a feature when angle between faces < includedAngle

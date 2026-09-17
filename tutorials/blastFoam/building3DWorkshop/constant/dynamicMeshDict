@@ -43,7 +43,7 @@ nBufferLayers   3;
 maxRefinement   2;
 
 // Stop refinement if maxCells reached
-maxCells        10000000;
+maxCells        2000000;
 
 // Write the refinement level as a volScalarField
 dumpLevel       true;

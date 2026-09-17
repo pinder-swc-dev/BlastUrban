@@ -23,13 +23,13 @@ startTime       0;
 
 stopAt          endTime;
 
-endTime         0.0025;
+endTime         0.0125;
 
-deltaT          1e-7;
+deltaT          5e-8;
 
 writeControl    adjustableRunTime;
 
-writeInterval   5e-5;
+writeInterval   2.5e-5;
 
 cycleWrite      0;
 
@@ -47,9 +47,9 @@ runTimeModifiable true;
 
 adjustTimeStep  yes;
 
-maxCo           0.5;
+maxCo           0.3;
 
-maxDeltaT       1;
+maxDeltaT       2.5e-7;
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -86,17 +86,23 @@ functions
     {
         type                surfaces;
         writeControl        adjustableRunTime;
-        writeInterval       1e-4;
+        writeInterval       2.5e-5;
         interpolate         false;
         interpolationScheme cellPointFace;
         surfaceFormat       vtkTimeSeries;
-        fields ( p );
+        fields ( p overpressure overpressureMax T );
         surfaces
         (
             ground
             {
                 type        patch;
                 patches     (ground);
+                triangulate false;
+            }
+            walls
+            {
+                type        patch;
+                patches     (walls);
                 triangulate false;
             }
             pContours
@@ -111,7 +117,7 @@ functions
                 planeType   pointAndNormal;
                 pointAndNormalDict
                 {
-                    point   (0 0 0.5);
+                    point   (35 20 1);
                     normal  (0 0 1);
                 }
                 interpolate true;
@@ -122,7 +128,7 @@ functions
                 planeType   pointAndNormal;
                 pointAndNormalDict
                 {
-                    point   (0 0 0.5);
+                    point   (35 20 1);
                     normal  (0 1 0);
                 }
                 interpolate true;
@@ -133,7 +139,7 @@ functions
                 planeType   pointAndNormal;
                 pointAndNormalDict
                 {
-                    point   (0 0 0.5);
+                    point   (35 20 1);
                     normal  (1 0 0);
                 }
                 interpolate true;
@@ -152,8 +158,9 @@ functions
         (
             // probe locations in ( x y z ) format
             // unlimited number -- needs to be inside the domain!
-            ( 2.0 0 0.5)    // In mesh
-            (0 2.1 1.0)     // Not in mesh
+            (35 15 1)       // Open street south of the charge
+            (40 20 1)       // Open street east of the charge
+            (35 25 1)       // Near a building face, in the air
             // etc.
         );
         fields
