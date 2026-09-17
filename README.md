@@ -9,6 +9,14 @@ C4 charge, adaptive refinement, MPI case และเครื่องมือ
 > Repository นี้เก็บเฉพาะ source code, case input, geometry, scripts และเอกสาร
 > เท่านั้น ไฟล์ที่เกิดจากการ build และผลคำนวณจะไม่ถูกเก็บใน Git
 
+## เอกสาร
+
+- [สารบัญเอกสาร](docs/README.md)
+- [การติดตั้ง](docs/INSTALLATION_TH.md)
+- [การใช้งาน](docs/USAGE_TH.md)
+- [การพัฒนาและแก้ไขโค้ด](docs/DEVELOPMENT_TH.md)
+- [การทำงานบน Server ผ่าน SSH](docs/REMOTE_DEVELOPMENT_TH.md)
+
 ## ความสามารถหลัก
 
 - จำลอง C4 detonation และ blast-wave propagation ด้วย `blastFoam`
