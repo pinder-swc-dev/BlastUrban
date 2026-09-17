@@ -1,334 +1,376 @@
-<!--- python3 -m readme2tex --nocdn --pngtrick --htmlize --output README.md INPUT.md && open README.md.html -->
-
-
-<p align="center">
-  <img src="media/synthetik-logo.png" width="350" title="hover text">
-</p>
-
-
-
 # BlastUrban
 
-Urban blast simulation source and case inputs based on blastFoam Version 6.0.
+BlastUrban คือชุด source code และ case สำหรับจำลองแรงระเบิดในเขตเมือง โดยพัฒนา
+ต่อจาก [blastFoam](https://github.com/synthetik-technologies/blastfoam) และใช้
+OpenFOAM Foundation 9 เป็นฐาน โปรเจกต์นี้เตรียม geometry อาคาร, mesh settings,
+C4 charge, adaptive refinement, MPI case และเครื่องมือแสดงผลสามมิติไว้สำหรับ
+รันบน Linux workstation, Docker หรือ calculation server ผ่าน SSH
 
-blastFoam is a library for single and multiphase compressible flow with application to high-explosive detonation, explosive safety and airblast, as well as general compressible flows. blastFoam is developed by [Synthetik Applied Technologies](https://www.synthetik-technologies.com). This offering is not approved or endorsed by OpenCFD Limited, producer and distributor of the OpenFOAM software via www.openfoam.com, and owner of the OPENFOAM<img alt="$\textregistered$" src="svgs/6abda71802c3922eebfcf1b67d5169b2.png" align="middle" width="16.438455000000005pt" height="22.831379999999992pt"/>  and OpenCFD<img alt="$\textregistered$" src="svgs/6abda71802c3922eebfcf1b67d5169b2.png" align="middle" width="16.438455000000005pt" height="22.831379999999992pt"/> trade marks.
+> Repository นี้เก็บเฉพาะ source code, case input, geometry, scripts และเอกสาร
+> เท่านั้น ไฟล์ที่เกิดจากการ build และผลคำนวณจะไม่ถูกเก็บใน Git
 
+## ความสามารถหลัก
 
-## How to use blastFoam
+- จำลอง C4 detonation และ blast-wave propagation ด้วย `blastFoam`
+- แบบจำลองเมืองขนาดประมาณ 70 × 75 × 34 เมตร
+- Computational domain ขนาด 110 × 115 × 55 เมตร
+- รองรับ adaptive mesh refinement และการคำนวณแบบ MPI
+- บันทึก pressure, overpressure, peak overpressure และอุณหภูมิใกล้ผนัง
+- มีทั้ง case เต็ม `townRun` และ case ทดสอบที่เล็กกว่า `townDemo`
+- ส่ง source ผ่าน Git และรันงานระยะไกลผ่าน SSH/Docker ได้
+- สร้าง HTML viewer แบบ offline จากผล VTK ได้
 
-Several validation and tutorial cases are included in the repository, and are documented in the [blastFoam User Guide](BlastFoam_User_Guide.pdf).
+รายละเอียด geometry และค่าของ case อยู่ที่
+[TOWN_SETUP.md](tutorials/blastFoam/building3DWorkshop/TOWN_SETUP.md)
 
-To edit on a workstation while compiling and running cases on a Linux server,
-see the [remote development guide (Thai)](docs/REMOTE_DEVELOPMENT_TH.md). The
-included `tools/remote-dev` helper synchronizes source and case inputs without
-copying OpenFOAM runtime output.
+## โครงสร้างสำคัญ
 
-
-### blastFoam workshop | Date: July 14, 2020 | Location: Virtual/Online | Cost: Free
-
-Thank you to everyone who attended!
-
-A recording of the workshop is also available on YouTube: [blastFoam July 14, 2020 Workshop on YouTube](https://youtu.be/OLpRcjR3cW4).
-
-
-### blastFoam workshop | Date: May 13, 2020 | Location: Virtual/Online | Cost: Free
-
-Thank you to everyone who attended!
-
-The workshop tutorial case and modifications have been added to the repository: [tutorials/blastFoam/building3DWorkshop](tutorials/blastFoam/building3DWorkshop).
-
-A recording of the workshop is also available on YouTube: [blastFoam May 13, 2020 Workshop on YouTube](https://www.youtube.com/watch?v=0YYrkwNWM6U).
-
-The slides from the workshop have been added to the repository: [blastFoam May Workshop Slides](media/Synthetik-Applied-Technologies-blastFoam-Workshop-May-Final-20200513.pdf)
-
-
-## Installation
-
-Detailed instructions on how to install and use blastFoam are found in the [blastFoam User Guide](blastFoam_User_Guide.pdf). Installation is simple and requires only OpenFOAM-9 and (optionally) gnuplot be installed. Basic installation steps are as follows:
-
-
-
-### How to install OpenFOAM for Linux
-Compiling OpenFOAM is straight forward, and a more detailed guide to installation can be found [here]{https://openfoam.org/download/source/software-for-compilation}. Once the necessary dependencies have been installed
-
-1. Clone the OpenFOAM-9 repository
-```bash
-cd $HOME/OpenFOAM
-git clone https://github.com/OpenFOAM/OpenFOAM-9.git
+```text
+applications/                         blastFoam solvers และ utilities
+src/                                  libraries ของ blastFoam
+etc/bashrc                            environment ของ BlastUrban
+tutorials/blastFoam/
+  building3DWorkshop/                 urban case หลัก
+    constant/triSurface/              STL geometry
+    system/                           mesh และ solver settings
+    townDemo/                         case สาธิตที่ใช้ทรัพยากรน้อยกว่า
+    visualization/                    เครื่องมือสร้าง 3D viewer
+    prepareTownRun.sh                 สร้าง townRun จาก source input
+docs/REMOTE_DEVELOPMENT_TH.md          คู่มือรันงานผ่าน SSH
+tools/remote-dev                      เครื่องมือ sync/build/run ทางไกล
+Dockerfile                            runtime image จากแพ็กเกจ .deb
 ```
 
-2. Compile OpenFOAM
+## ความต้องการของระบบ
+
+ระบบที่แนะนำ:
+
+- Ubuntu 20.04 หรือ Linux ที่เข้ากันได้
+- OpenFOAM **Foundation 9** ไม่ใช่ OpenFOAM.com รุ่น `vXXXX`
+- GCC/G++, GNU Make และ `wmake`
+- OpenMPI
+- Git และ `rsync`
+- RAM อย่างน้อย 16 GB สำหรับ case เมืองเป็นจุดเริ่มต้น
+- พื้นที่ว่างประมาณ 50–100 GB สำหรับ full run และ checkpoints
+
+case ปัจจุบันตั้ง `numberOfSubdomains` ไว้ 4 จึงใช้ MPI 4 ranks โดยค่าเริ่มต้น
+
+## วิธีที่ 1: ติดตั้งจาก source บน Ubuntu
+
+### 1. ติดตั้ง OpenFOAM Foundation 9
+
+คำสั่งต่อไปนี้ตรงกับ Ubuntu 20.04 และ Dockerfile ของโปรเจกต์:
+
 ```bash
-cd OpenFOAM-9
-echo "source $HOME/OpenFOAM/OpenFOAM-9/etc/bashrc" >> ~/.bashrc
+sudo apt update
+sudo apt install -y wget software-properties-common git build-essential \
+    openmpi-bin libopenmpi-dev rsync
+
+wget -O - https://dl.openfoam.org/gpg.key | sudo apt-key add -
+sudo add-apt-repository http://dl.openfoam.org/ubuntu
+sudo apt update
+sudo apt install -y openfoam9
+```
+
+หากใช้ Linux รุ่นอื่น ให้ติดตั้ง OpenFOAM Foundation 9 ตามวิธีของระบบนั้น และ
+ตรวจให้พบไฟล์ `etc/bashrc` ของ OpenFOAM ก่อนดำเนินการต่อ
+
+### 2. Clone และ compile BlastUrban
+
+```bash
+git clone https://github.com/pinder-swc-dev/BlastUrban.git
+cd BlastUrban
+
+source /opt/openfoam9/etc/bashrc
 source etc/bashrc
-./Allwmake > log.Allwmake 2>&1
+./Allwmake -j "$(nproc)"
 ```
 
+ตรวจสอบการติดตั้ง:
 
-### How to install OpenFOAM for Windows 10
-An installation video for Windows 10 is available on our YouTube channel: https://youtu.be/vfd610LadSU
-
-<p align="center">
-  <img src="media/installation_thumbnail.png" width="450" title="Installing blastFoam in Windows 10">
-</p>
-
-
-
-
-### How to Install OpenFOAM for macOS
-Compiling OpenFOAM on macOS is relatively straightforward. This [guide and repository](https://github.com/mrklein/openfoam-os-x/wiki/OpenFOAM(R)-git-version-&-Homebrew) provides step-by-step instructions as well as the necessary patch to compile OpenFOAM on macOS.
-
-
-
-### How to install blastFoam
-
-1. Install OpenFOAM-9 (if not already installed, see above)
-See https://openfoam.org/version/9 for OpenFOAM installation instructions.
-
-2. Create the OpenFOAM directory
 ```bash
-mkdir -p $HOME/OpenFOAM
+echo "$WM_PROJECT_VERSION"
+command -v blastFoam
+blastFoam -help
 ```
 
-3. Go to the $HOME/OpenFOAM directory
+ค่าที่ถูกต้องควรแสดง OpenFOAM version `9` และพบ executable `blastFoam`
+
+หากต้องการโหลด environment ทุกครั้งที่เปิด Bash ให้เพิ่ม:
+
 ```bash
-cd $HOME/OpenFOAM
+echo 'source /opt/openfoam9/etc/bashrc' >> ~/.bashrc
+echo 'source /absolute/path/to/BlastUrban/etc/bashrc' >> ~/.bashrc
 ```
 
-4. Clone the blastFoam repository
+เปลี่ยน `/absolute/path/to/BlastUrban` ให้เป็น path จริงของ repository
+
+### 3. ล้างไฟล์จากการ compile
+
 ```bash
-git clone https://github.com/synthetik-technologies/blastfoam.git
+source /opt/openfoam9/etc/bashrc
+source etc/bashrc
+./Allwclean
 ```
 
-5. Go to the blastfoam directory
+## วิธีที่ 2: ติดตั้งจากแพ็กเกจ Debian
+
+ถ้ามีไฟล์ release ชื่อ `blastfoam_*.deb`:
+
 ```bash
-cd $HOME/OpenFOAM/blastfoam
+sudo apt install ./blastfoam_*.deb
+source /opt/openfoam9/etc/bashrc
+source /opt/blastfoam/etc/bashrc
+blastFoam -help
 ```
 
-7. Append the etc/bashrc to your .bashrc and/or .zshrc file
+หากต้องการสร้าง `.deb` เอง ต้องติดตั้ง OpenFOAM 9 และ build tools ก่อน:
+
 ```bash
-echo "source $HOME/OpenFOAM/blastfoam/etc/bashrc" >> $HOME/.bashrc
-# or if using zsh:
-echo "source $HOME/OpenFOAM/blastfoam/etc/bashrc" >> $HOME/.zshrc
+sudo apt install -y devscripts debhelper
+source /opt/openfoam9/etc/bashrc
+source etc/bashrc
+debuild --no-lintian -i -nc -us -uc -b --jobs=auto
 ```
 
+แพ็กเกจที่สร้างจะอยู่ใน directory แม่ของ repository เช่น
+`../blastfoam_<version>_<architecture>.deb`
 
-8. Load and set the bash environment to compile blastFoam
+## วิธีที่ 3: ติดตั้งและรันด้วย Docker
+
+Dockerfile ปัจจุบันเป็น runtime image และต้องมี `blastfoam_*.deb` อยู่ใน build
+context ก่อน หากเพิ่งสร้างแพ็กเกจจากหัวข้อก่อนหน้า ให้คัดลอกเข้ามาแล้ว build:
+
 ```bash
-source $HOME/.bashrc
-# or if using zsh:
-source $HOME/.zshrc
+cp ../blastfoam_*.deb .
+docker build -t blasturban:latest .
 ```
 
-9. Compile blastFoam (for parallel use "-j")
+เปิด shell ภายใน container โดย mount repository จากเครื่อง host:
+
 ```bash
-./Allwmake -j
+docker run --rm -it \
+    -v "$PWD:/app/blastfoam" \
+    blasturban:latest
 ```
 
-10. Test your installation by running the tutorial and validation cases
+รัน `townDemo` และเขียนผลกลับลง repository บน host:
 
-
-
-
-### Questions
-If you find any bugs, please let us know in the issues section of the repository. If you want to get in touch: info@synthetik-technologies.com.
-
-
-
-
-### Citation
-If you use this code for your work or research, please use this citation:
-
-```
-blastFoam: An OpenFOAM Solver for Compressible Multi-Fluid Flow with Application to High-Explosive Detonation. Synthetik Applied Technologies, LLC., 2020.
-```
-BiBTex:
-```
-@software{blastfoam,
-	title = {{blastFoam}: A Solver for Compressible Multi-Fluid Flow with Application to High-Explosive Detonation},
-	url = {https://github.com/synthetik-technologies/blastfoam},
-	publisher = {Synthetik Applied Technologies, {LLC}.},
-	date = {2020-04-13}
-}
+```bash
+docker run --rm -it \
+    --env OMPI_ALLOW_RUN_AS_ROOT=1 \
+    --env OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
+    -v "$PWD:/app/blastfoam" \
+    blasturban:latest \
+    'cd tutorials/blastFoam/building3DWorkshop/townDemo && ./Allrun'
 ```
 
+สำหรับ Server ควร mount directory บน persistent disk เสมอ อย่าเก็บ case หรือ
+ผลคำนวณไว้เฉพาะ writable layer ของ container เพราะข้อมูลจะหายเมื่อ container
+ถูกลบ
 
+## Windows และ macOS
 
+### Windows
 
+แนะนำให้ใช้ WSL2 พร้อม Ubuntu 20.04 แล้วทำตามวิธีติดตั้งจาก source หรือใช้
+Docker Desktop ไม่แนะนำให้ compile OpenFOAM/blastFoam แบบ native Windows
 
-## User Guide
-To cite the [blastFoam User Guide](blastFoam_User_Guide.pdf).:
+### macOS
+
+แนะนำให้ใช้ Docker image แบบ Linux โดยเฉพาะเครื่อง Apple Silicon ซึ่งอาจต้อง
+ระบุ `--platform linux/amd64` หาก image หรือแพ็กเกจถูกสร้างสำหรับ x86-64
+
+## การรัน Urban case
+
+ก่อนรันแบบ native ต้องโหลด environment:
+
+```bash
+cd /path/to/BlastUrban
+source /opt/openfoam9/etc/bashrc
+source etc/bashrc
 ```
-J. Heylmun, P. Vonk, and T. Brewer, "blastFoam 6.0 User Guide", Synthetik Applied Technologies, LLC., 06-Aug-2020.
-```
-BiBTex:
-```
-@misc{heylmun_blastfoamguide_2021,
-	title = {{blastFoam version 6.0} {User} {Guide} },
-	url = {https://github.com/synthetik-technologies/blastfoam},
-	language = {English},
-	publisher = {Synthetik Applied Technologies, LLC.},
-	author = {Heylmun, Jeffrey and Vonk, Peter and Brewer, Timothy},
-	month = aug,
-	year = {2022}
-}
+
+### Case สาธิต
+
+`townDemo` ใช้ mesh ที่หยาบกว่าและมี simulation time ถึง 2.5 ms:
+
+```bash
+cd tutorials/blastFoam/building3DWorkshop/townDemo
+./Allrun
 ```
 
+### Case เต็ม
 
+สร้าง `townRun` ใหม่จาก source input แล้วเริ่ม calculation:
 
+```bash
+cd tutorials/blastFoam/building3DWorkshop
+./prepareTownRun.sh
+cd townRun
+./Allrun
+```
 
+`Allrun` จะทำงานตามลำดับดังนี้:
 
+1. สร้าง feature edges จาก STL
+2. สร้าง base mesh ด้วย `blockMesh`
+3. แบ่ง mesh สำหรับ MPI
+4. สร้าง mesh รอบอาคารด้วย `snappyHexMesh`
+5. ตั้งค่า C4 และ initial fields
+6. รัน `blastFoam` แบบ parallel
+7. สร้าง VTK surfaces และคำนวณ impulse
 
-### blastFoam Publications:
+ติดตามสถานะด้วย:
 
-## Journals/Conferences
+```bash
+tail -f log.blastFoam
+du -sh .
+df -h .
+```
 
-1. T. Brewer, J. Heylmun, and P. Vonk, "Employment of the Open-source Airblast Solver blastFoam to Support the Super Heavy Improvised Explosive Loading Demonstration (SHIELD) Test Program" presented at the ISIEMS, USA, 2019.
-2. D. Stephens, P. Vonk, and T. Brewer, "Validation of Open-source Airblast Solver (blastFoam) in an Urban Environment," presented at the MABS 25, Hague, Netherlands, 2018.
-3. P. Vonk, "A New OpenFOAM Solver for Compressible Multi-Fluid Flow with Application to High-Explosive Detonation," presented at the OpenFOAM Users Conference, Cologne, Germany, 2016.
-4. P. Vonk, T. Brewer, "A New OpenFOAM Solver for Compressible Multi-Fluid Flow with Application to High-Explosive Detonation and Extended Validation," presented at the OpenFOAM Users Conference, USA, 2016.
+ล้าง mesh และผลของ case ด้วย:
 
+```bash
+./Allclean
+```
 
+คำสั่งนี้ลบผลคำนวณของ case โปรดสำรอง checkpoint ที่ต้องการเก็บก่อนใช้งาน
 
+## ใช้ Git และ calculation server ผ่าน SSH
 
+แนวทางที่แนะนำคือใช้ Git สำหรับ source/input และใช้ persistent disk ของ Server
+สำหรับผลคำนวณ:
 
-### blastFoam Version 6.0 Release Notes and Features
-blastFoam 6.0 greatly improves the numerics library to include multivariate root finding, minimisation/optimisation, and numerical integration. The equation structure has also been improved and generalised. Lookup tables have also been greatly improved by adding support for mixed order interpolation and more general file readers. 3D lookup tables have also been implemented.
+```text
+Workstation -- git push --> GitHub
+                              |
+Server ----- git pull --------+
+  |
+  +-- Docker/OpenFOAM calculation
+  +-- persistent results directory
+```
 
-Additional thermodynamic and transport models including power law and  tabulated. Two and multiphase temperature calculations have been expanded to now solve a coupled root finding method that incorperate all phase contributions of energy and density.
+### เครื่องทำงาน
 
-Improved and additional refinement methods including polyhedral refinement from foam-extend with the support for 3D, 2D, and 2D axisymmetric refinement with dynamic load balancing.
+```bash
+git add -A
+git commit -m "Describe the change"
+git push origin main
+```
 
-Improvements for the rotateFields utility now allow for iterative refinement based on the methods provided in dynamicMeshDict.
+### Server
 
-Burst patches have been added to allow for the breaking of internal faces based on a given criteria.
+ตั้ง SSH key หรือ GitHub deploy key ก่อน แล้ว clone ครั้งแรก:
 
-The setRefinedField utility has been expanded to include the option to set zones and sets based on the given regions. All field types are now able to be set using defaultValues and regions.
+```bash
+ssh user@server
+git clone git@github.com:pinder-swc-dev/BlastUrban.git \
+    /srv/blasturban/source
+cd /srv/blasturban/source
+```
 
-Time integration now supports restarting of time steps which is useful for FSI cases.
+อัปเดต source ในครั้งต่อไป:
 
+```bash
+git fetch origin
+git switch main
+git pull --ff-only origin main
+```
 
-### Previous Releases
+จากนั้น compile แบบ native หรือ build/run Docker ตามหัวข้อด้านบน ห้ามบันทึก
+password, access token หรือ private SSH key ลง repository หรือ Docker image
 
-### blastFoam Version 5.0 Release Notes and Features
-blastFoam 5.0 greatly improves compatibility of blastFoam thermodynamics with that of standard OpenFOAM. This results in the ability to use most standard OpenFOAM functionObjects and fvModels and constraints. This also includes the ability to compile new combinations of thermodynamic models at run-time. Additional thermodynamic models have been added including ePower, ePolynomial, eTabulated, hPower, hPolynomial, and hTabulated. Additional fluid transport models have been added including polynomial, logPolynomial, sutherland, WLF, and tabulated. Additional sold transport models have been added including exponential and polynomial.
+ดึงผลกลับมายังเครื่องทำงานด้วย `rsync`:
 
-Support for fvModels and fvConstraints has been added. This allows for sources that are not typically included in the solver, for example point mass sources.
+```bash
+rsync -a --partial --info=progress2 \
+    user@server:/srv/blasturban/results/ \
+    ./server-results/
+```
 
-Improvements for the rotateFields utility included mapping of fields not included in the target directory as well as fixes to the rotation of non scalar fields. 1-D cases can now be directly mapped to 3D cases.
+สำหรับ workflow ที่ใช้ `rsync` ส่ง source โดยตรงแทน `git pull` ดู
+[คู่มือ Remote Development](docs/REMOTE_DEVELOPMENT_TH.md)
 
-A large selection of numerical methods have also been added including univariate and root finding methods, numerical integration, and minimization.
+## การสร้าง 3D viewer
 
-New methods to initialize non-uniform fields have been added to the setRefinedFields utility such as calculatedDensity, function, and massIntegrate. New cell set types have also been added and include boxMassToCell, cylindericalMassToCell, and sphericalMassToCell.
+ติดตั้ง Python VTK ก่อน:
 
-Because the output of lagrangian particles is not compatible with the builtin paraview reader, the convertLagrangianPositions utility has been added to convert the standard lagrangian format to one that paraview can read, allowing the viewing of parallel largrangian cases, without the need to reconstruct cases.
+```bash
+sudo apt install -y python3-vtk
+```
 
-### blastFoam Version 4.0 Release Notes and Features
-blastFoam 4.0 introduces particle solvers. This includes Eulerian multi-fluid methods (blastEulerFoam), Lagrangian (blastParcelFoam), and possible coupling to OpenQBMM for number-density function transport coupling (blastPbeTransportFoam, blastUncoupledVdfTransportFoam, and blastVdfTransportFoam).
+หลัง `townDemo` คำนวณเสร็จ:
 
-Additional equations of state have been added including the Tillotson equation of state for cavitating fluids and the Abel-Nobel equation of state for propellants.
+```bash
+cd tutorials/blastFoam/building3DWorkshop/townDemo
+python3 ../visualization/exportTownBlast3D.py --case .
+```
 
-Improvements for activation model including the optional use of delayed detonations and the size of activation points for all activation models, as well as the new programmedIgnition activation model.
+ผลลัพธ์คือ `blast3D.html` และ `blast3D.surfaceStats.csv` ซึ่งถูก ignore โดย Git
+รายละเอียดเพิ่มเติมอยู่ใน
+[visualization/README.md](tutorials/blastFoam/building3DWorkshop/visualization/README.md)
 
-Diameter models have been added for use with the Arrhenius rate activation model, as well as the phase models used in the blastEulerFoam solver. These include constant diameter, constant mass, and a quadrature-based method of moments (qbmm) diameter.
+## ไฟล์ที่ไม่ควรอัปโหลดเข้า Git
 
-New numerical schemes have been added which include 1st, 2nd, and 3rd order MUSCL reconstruction with limiters. Additional options for Strong-stability-preserving Runge-Kutta methods have been added including one, two, and three step RK1-SSP, two, three, and four step RK2-SSP, and three and four step RK3-SSP.
+`.gitignore` เตรียมตัดไฟล์เหล่านี้แล้ว:
 
-A new functionObjects including tracer particles for the transport of passive particles and the monitoring of conserved quantities.
+- executable, libraries, `linux64*` และ `lnInclude`
+- `processor*`
+- `constant/polyMesh` และ `extendedFeatureEdgeMesh`
+- `postProcessing`, VTK และ `*.foam`
+- logs, HTML viewer, generated PDF และ archives
+- `.remote.env` และ `server-results`
 
-A simple fluid-structure-interaction solver (blastFSIFoam) has been added, however this is still experimental and not yet stable.
+ตรวจสอบก่อน commit ทุกครั้ง:
 
-Further improvements have been made to the setRefinedFields utility for more control over setting fields and faster convergence of refinement.
+```bash
+git status
+git diff --cached --check
+```
 
+## ปัญหาที่พบบ่อย
 
-## blastFoam Version 3.0 Release Notes and Features
+### `blastFoam: command not found`
 
-blastFoam 3.0 now includes thirteen equations of state that allow modeling of diverse materials under extreme conditions, with consideration of phenomenologies such as excitation, dissociation and ionization of nitrogen and oxygen in air at higher energies and temperatures, afterburn, and sympathetic detonation.
+```bash
+source /opt/openfoam9/etc/bashrc
+source /path/to/BlastUrban/etc/bashrc
+```
 
-We have introduced several different approaches to model detonation within explosive materials which transition from unreacted energetics to detonation products, including pressure-based activation models with multi-step Arrhenius reaction rates, and simple, yet practical models based on empirically derived detonation velocities. Users can also specify instantaneous activation.
+ถ้ายังไม่พบ ให้ compile ใหม่และอ่านท้าย build log
 
-blastFoam allows phenomena such as size effect (decrease of the detonation velocity with decreasing charge radius), and detonation front curvature (induced by edge lag of the front as energy is lost to the exterior of the charge) to be accurately captured.  These additions greatly enhance timing accuracy and load characterization, especially for near-contact explosive scenarios.  Options for modeling afterburn (i.e., under-oxygenated explosives continuing to burn after detonation) are also included using the Miller extension, constant, and linear rate models.
+### OpenFOAM คนละรุ่น
 
-blastFoam extends OpenFOAM's base AMR library, and includes the ability to perform 2D and 3D adaptive mesh refinement (AMR). The refinement criteria can be based on density gradient, change across faces (delta), or Lohner's method (2nd derivative of a field) to determine what cell should be refined or unrefined. Additionally, options for mesh unrefinement/relaxation/coarsening have been added, and this is useful for keeping cell counts relatively constant during a calculation while still capturing key features (e.g. shocks) with high accuracy. This allows blastFoam to solve engineering-scale simulations at an affordable computational cost.
+```bash
+echo "$WM_PROJECT_VERSION"
+```
 
-blastFoam extends OpenFOAM by adding dynamic load rebalancing for adaptive grids, and now includes a working solution for 2D and experimental support for 3D calculations.  Essentially, at a predetermined timestep interval the domain is rebalanced so that the cell count per CPU is more evenly distributed. This mitigates potential memory issues such as crashing and slow-down related to overloading CPUs that are operating on zones of high refinement.
+โปรเจกต์นี้ต้องการ Foundation version `9` การใช้ OpenFOAM.com รุ่น `vXXXX`
+อาจทำให้ compile หรือ runtime ล้มเหลว
 
-Turbulence and radiation models have been integrated, allowing blastFoam users to leverage the extensive OpenFOAM libraries and apply them to their simulations, and a new fluid model structure (fluidThermo class), that extends OpenFOAM's standard thermo classes has been added, and provides thermodynamically consistent solutions for more accurate temperature calculations.
+### MPI ไม่ยอมรันใน Docker
 
-New *functionObjects* have been added to improve usability, including the ability to calculate peak overpressure and impulse for each cell in the domain, as well as *blastToVTK*, a utility to view time series mesh surface outputs in *ParaView*.
+container ปัจจุบันทำงานด้วย root จึงต้องกำหนด
+`OMPI_ALLOW_RUN_AS_ROOT=1` และ `OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1` ตามตัวอย่าง
+Docker ข้างต้น
 
-Additional validation and tutorial cases are also provided to demonstrate and showcase the new functionality and capabilities of blastFoam v3.0.
+### Server พื้นที่เต็ม
 
-The code contains multiple utilities to prepare calculations for complex geometries of interest (e.g. engineering-scale; from CAD models), including parallel mesh generation, mesh refinement, advanced post-processing, and import/export functions. Verification and validation studies have been conducted with independent validation (conducted by others) performed on larger-scale problems with complex geometries and published in peer-reviewed journals.  The solver can be run on any modern platform (e.g. laptop, workstation, HPC, AWS, GCP, etc.).
+ลด `writeInterval`, เลือก field ที่จำเป็น หรือย้ายผลเก่าออกจาก persistent disk
+อย่าแก้ปัญหาด้วยการ commit `processor*` หรือ `postProcessing` เข้า Git
 
-blastFoam currently supports the following features:
+## คำเตือนด้านวิศวกรรม
 
-- An arbitrary number of phases and EOS's
-- Multiple activation and burn models
-- Compatiblity with all OpenFOAM's compressible LES and RANS turbulence models
-- Extensive verification and validation
-- JLW equation of state with constant, linear, and "Miller" afterburn models
-- Multiple example and tutorial cases
-- Automatic mesh refinement (AMR)
-- Blast specific function object for post-processing
-- High-order (1st, 2nd, 3rd and 4th order in time; 2nd and 3rd order spatial)
-- HLLC, AUSM+, Kurganov, Tadmor flux schemes
-- Parallel (MPI)
-- Compatible with all of OpenFOAM's standard mesh generation, pre- and post-processing utilities
-- Multiple solvers for high-speed reactive flow and deflatration to detonation transition
-- Performance improvements for axisymmetric cases that use wedge boundary conditions (v3.0.1)
+ผลจาก `townDemo` และ `townRun` เป็นแบบจำลองเชิงตัวเลข ต้องทำ mesh/time-step
+convergence study และตรวจสอบสมมติฐานวัสดุ, charge, boundary conditions และ
+geometry ก่อนนำค่าไปใช้ในการออกแบบหรือการตัดสินใจด้านความปลอดภัย
 
-## Equations of State
+## เครดิตและลิขสิทธิ์
 
-blastFoam includes the following equations of state:
+BlastUrban พัฒนาต่อจาก blastFoam โดย Synthetik Applied Technologies และ
+OpenFOAM Foundation 9 โปรดดูเงื่อนไขใน [COPYING](COPYING) และ copyright headers
+ของแต่ละไฟล์
 
-- Ideal gas
-- Stiffened gas
-- Tait
-- Van der Waals
-- Landau, Stanyukovich, Zeldovich, and Kompaneets (LSZK)
-- Jones Wilkens Lee (JWL)
-- Cochran-Chan
-- Doan-Nickel
-- Jones Wilkens Lee C-Form (JWLC)
-- Becker Kistiakowsky Wilson (BKW)
-- Benedict Webb Rubin (BWR)
-- Murnaghan
-- Birch Murnaghan (2nd and 3rd order)
-- Tabulated
-
-
-## Activation models
-
-blastFoam includes the following activation models
-
-- None (instantaneous reaction)
-- Multi-point linear activation
-- Pressure-based
-- Arrhenius rate
-- Constant rate
-
-
-
-## Afterburn models
-
-blastFoam includes the following afterburn models
-
-- None
-- Constant
-- Linear
-- Miller
-
-
-
-### Verification and Validation
-
-blastFoam has been validated against known solutions to standard hydrodynamics problems, and against data from physical tests. Validation cases are included with example/tutorial cases as part of the solver source code.
-
-
-
-
-### Disclaimer
-
-This offering is not approved or endorsed by OpenCFD Limited, producer and distributor of the OpenFOAM software via www.openfoam.com, and owner of the OPENFOAM<img alt="$\textregistered$" src="svgs/6abda71802c3922eebfcf1b67d5169b2.png" align="middle" width="16.438455000000005pt" height="22.831379999999992pt"/>  and OpenCFD<img alt="$\textregistered$" src="svgs/6abda71802c3922eebfcf1b67d5169b2.png" align="middle" width="16.438455000000005pt" height="22.831379999999992pt"/> trade marks.
+OpenFOAM เป็นเครื่องหมายการค้าของเจ้าของที่เกี่ยวข้อง โปรเจกต์นี้ไม่ได้รับการ
+รับรองโดย OpenCFD Limited หรือผู้จัดจำหน่าย OpenFOAM รายอื่น

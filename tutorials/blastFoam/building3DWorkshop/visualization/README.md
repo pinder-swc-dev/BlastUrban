@@ -11,14 +11,12 @@ python3 visualization/exportTownPreview.py
 ```
 
 Open `townMeshPreview.html` to inspect the gray town surface with edges inside
-the yellow `blockMesh` Domain. This preview has no simulated pressure or
-temperature fields.
+the yellow `blockMesh` Domain. The generated preview is ignored by Git and has
+no simulated pressure or temperature fields.
 
-The existing `blast3D.html` still uses the previous L_Wall VTK results; its
-label makes this clear. The detailed `townRun` has a partial calculated
-result and can resume from its latest saved time. `townDemo` is the imported
-town calculation with coarser wall refinement and a charge near a building.
-Export its real wall and blast-wave VTK results with:
+This repository does not include calculated fields or HTML viewers. Run
+`townDemo` or prepare a fresh `townRun`, then export the calculated wall and
+blast-wave VTK results with:
 
 ```bash
 cd townDemo
@@ -28,8 +26,8 @@ python3 ../visualization/exportTownBlast3D.py --case .
 The resulting `townDemo/blast3D.html` is a standalone offline 3D time viewer;
 `blast3D.surfaceStats.csv` lists exact wall-patch maxima and 110 kPa wave
 extent at each displayed time.
-`townDemo/townDemo.foam` opens the full decomposed calculation in ParaView;
-select the `walls` patch, choose `Surface With Edges`, and color by
+Use `paraFoam -builtin` from the case directory to open the decomposed
+calculation in ParaView; select the `walls` patch, choose `Surface With Edges`, and color by
 `overpressure`, `overpressureMax`, or `T` at the saved times.
 Use `sh prepareTownRun.sh anotherName` to stage another fresh run; the script
 refuses to replace an existing case directory.
