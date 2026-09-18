@@ -14,6 +14,7 @@ from blast_case_builder import (
     auto_domain,
     create_case,
     parse_probes,
+    repair_stl,
     validate_config,
 )
 
@@ -50,6 +51,15 @@ endfacet
 endsolid tetra
 """
 
+OPEN_TETRA_STL = TETRA_STL.replace("""facet normal 1 1 1
+ outer loop
+  vertex 1 0 0
+  vertex 0 1 0
+  vertex 0 0 1
+ endloop
+endfacet
+""", "")
+
 
 class StlTests(unittest.TestCase):
     def test_ascii_closed_surface_and_scale(self) -> None:
@@ -75,6 +85,30 @@ class StlTests(unittest.TestCase):
 
     def test_probe_parser(self) -> None:
         self.assertEqual(parse_probes("1 2 3 # one\n(4, 5, 6)\n"), [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)])
+
+    def test_repairs_a_small_planar_hole_without_overwriting_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "open.stl"
+            output = Path(directory) / "open_repaired.stl"
+            source.write_text(OPEN_TETRA_STL, encoding="ascii")
+            original = source.read_bytes()
+            result = repair_stl(source, output, scale=1, weld_tolerance_m=0.0001, max_hole_size_m=2)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertEqual(result.report_before.open_edges, 3)
+            self.assertEqual(result.holes_filled, 1)
+            self.assertEqual(result.triangles_added, 1)
+            self.assertEqual(result.report_after.open_edges, 0)
+            self.assertEqual(result.report_after.non_manifold_edges, 0)
+
+    def test_does_not_guess_how_to_fill_a_hole_above_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "open.stl"
+            output = Path(directory) / "open_repaired.stl"
+            source.write_text(OPEN_TETRA_STL, encoding="ascii")
+            result = repair_stl(source, output, scale=1, weld_tolerance_m=0, max_hole_size_m=0.5)
+            self.assertEqual(result.holes_filled, 0)
+            self.assertEqual(result.holes_skipped_too_large, 1)
+            self.assertEqual(result.report_after.open_edges, 3)
 
 
 class CaseGenerationTests(unittest.TestCase):
@@ -102,6 +136,7 @@ class CaseGenerationTests(unittest.TestCase):
             root = Path(directory)
             stl = root / "small model.stl"
             stl.write_text(TETRA_STL, encoding="ascii")
+            stl.with_suffix(".repair.json").write_text('{"holes_filled": 1}\n', encoding="utf-8")
             report = analyse_stl(stl, run_external=False)
             config = CaseConfig(
                 case_name="testCase3D",
@@ -123,6 +158,9 @@ class CaseGenerationTests(unittest.TestCase):
             target, archive, _ = create_case(config, root / "out", report, DEFAULT_TEMPLATE, True)
             self.assertTrue(archive and archive.is_file())
             self.assertTrue((target / "0/p").is_file())
+            self.assertTrue((target / "geometry-repair.json").is_file())
+            self.assertTrue((target / "organizeSurfaceCheckOutput.sh").stat().st_mode & 0o111)
+            self.assertIn("organizeSurfaceCheck", (target / "Allrun").read_text())
             self.assertTrue((target / "preflight.sh").stat().st_mode & 0o111)
             self.assertIn("numberOfSubdomains 10", (target / "system/decomposeParDict").read_text())
             self.assertIn('file "small_model.stl"', (target / "system/snappyHexMeshDict").read_text())

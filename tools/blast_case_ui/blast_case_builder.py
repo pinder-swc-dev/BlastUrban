@@ -17,6 +17,7 @@ import statistics
 import struct
 import subprocess
 import tarfile
+from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -160,6 +161,49 @@ class StlReport:
         return "\n".join(lines)
 
 
+@dataclass
+class RepairResult:
+    source: str
+    output: str
+    weld_tolerance_m: float
+    max_hole_size_m: float
+    welded_vertices: int
+    removed_degenerate: int
+    removed_duplicate_faces: int
+    boundary_loops_found: int
+    holes_filled: int
+    holes_skipped_too_large: int
+    holes_skipped_not_planar: int
+    holes_skipped_complex: int
+    triangles_added: int
+    report_before: StlReport
+    report_after: StlReport
+
+    def readable_summary(self) -> str:
+        lines = [
+            "ผลการซ่อมโมเดล",
+            f"สร้างไฟล์ใหม่: {self.output}",
+            f"เชื่อมจุดที่อยู่ใกล้กัน: {self.welded_vertices:,} จุด",
+            f"ลบหน้าที่เสีย/ซ้ำ: {self.removed_degenerate:,} / {self.removed_duplicate_faces:,}",
+            f"พบขอบรูแบบวงปิด: {self.boundary_loops_found:,} วง",
+            f"ปิดรูสำเร็จ: {self.holes_filled:,} รู (เพิ่ม {self.triangles_added:,} triangles)",
+        ]
+        skipped = self.holes_skipped_too_large + self.holes_skipped_not_planar + self.holes_skipped_complex
+        if skipped:
+            lines.append(
+                f"ยังไม่ปิด {skipped:,} รู: ใหญ่เกินกำหนด {self.holes_skipped_too_large:,}, "
+                f"ผิวไม่เรียบ {self.holes_skipped_not_planar:,}, รูปทรงซับซ้อน {self.holes_skipped_complex:,}"
+            )
+        before = self.report_before.open_edges if self.report_before.open_edges is not None else -1
+        after = self.report_after.open_edges if self.report_after.open_edges is not None else -1
+        lines.append(f"ขอบเปิดก่อน/หลัง: {before:,} → {after:,}")
+        if self.report_after.errors:
+            lines.append("ยังต้องแก้เพิ่มเติม: " + "; ".join(self.report_after.errors))
+        else:
+            lines.append("โมเดลปิดเรียบร้อย พร้อมสร้างพื้นที่คำนวณ")
+        return "\n".join(lines)
+
+
 def _binary_stl_info(path: Path) -> Tuple[bool, int]:
     size = path.stat().st_size
     if size < 84:
@@ -265,6 +309,13 @@ def analyse_stl(
     for triangle in iter_stl_triangles(path):
         tri = tuple(_scaled(point, scale) for point in triangle)  # type: ignore[assignment]
         triangle_count += 1
+        if topology_complete and triangle_count > topology_triangle_limit:
+            # Binary STL count is known from its header; ASCII count is not.
+            # Drop the large topology sets as soon as an ASCII file crosses
+            # the same safety limit.
+            topology_complete = False
+            vertices = None
+            edges = None
         for point in tri:
             if vertices is not None:
                 vertices.add(point)
@@ -401,6 +452,309 @@ def analyse_stl(
         topology_complete=topology_complete,
         external_output=external_output,
         external_returncode=external_returncode,
+    )
+
+
+def _write_binary_stl(path: Path, vertices: Sequence[Vec3], faces: Sequence[Tuple[int, int, int]]) -> None:
+    if len(faces) > 0xFFFFFFFF:
+        raise ValueError("STL มีจำนวน triangles มากเกินรูปแบบ binary STL")
+    header_text = b"BlastUrban repaired STL - original file preserved"
+    header = header_text + b"\0" * (80 - len(header_text))
+    record = struct.Struct("<12fH")
+    with path.open("wb") as handle:
+        handle.write(header)
+        handle.write(struct.pack("<I", len(faces)))
+        for ia, ib, ic in faces:
+            a, b, c = vertices[ia], vertices[ib], vertices[ic]
+            normal = _cross(_sub(b, a), _sub(c, a))
+            length = _norm(normal)
+            if length > 0:
+                normal = (normal[0] / length, normal[1] / length, normal[2] / length)
+            handle.write(record.pack(*(normal + a + b + c + (0,))))
+
+
+def _project_loop(vertices: Sequence[Vec3], loop: Sequence[int], normal: Vec3) -> Dict[int, Tuple[float, float]]:
+    axis = max(range(3), key=lambda i: abs(normal[i]))
+    if axis == 0:
+        return {index: (vertices[index][1], vertices[index][2]) for index in loop}
+    if axis == 1:
+        return {index: (vertices[index][0], vertices[index][2]) for index in loop}
+    return {index: (vertices[index][0], vertices[index][1]) for index in loop}
+
+
+def _cross_2d(a: Tuple[float, float], b: Tuple[float, float], c: Tuple[float, float]) -> float:
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _strictly_inside_triangle_2d(
+    point: Tuple[float, float],
+    a: Tuple[float, float],
+    b: Tuple[float, float],
+    c: Tuple[float, float],
+    orientation: float,
+    epsilon: float,
+) -> bool:
+    return all(
+        value * orientation > epsilon
+        for value in (
+            _cross_2d(a, b, point),
+            _cross_2d(b, c, point),
+            _cross_2d(c, a, point),
+        )
+    )
+
+
+def _triangulate_loop(vertices: Sequence[Vec3], loop: Sequence[int], normal: Vec3) -> Optional[List[Tuple[int, int, int]]]:
+    """Triangulate a simple planar polygon with ear clipping."""
+    if len(loop) < 3:
+        return None
+    projected = _project_loop(vertices, loop, normal)
+    polygon = list(loop)
+    signed_area = sum(
+        projected[polygon[i]][0] * projected[polygon[(i + 1) % len(polygon)]][1]
+        - projected[polygon[(i + 1) % len(polygon)]][0] * projected[polygon[i]][1]
+        for i in range(len(polygon))
+    )
+    if abs(signed_area) <= 1e-24:
+        return None
+    orientation = 1.0 if signed_area > 0 else -1.0
+    span = max(
+        max(point[0] for point in projected.values()) - min(point[0] for point in projected.values()),
+        max(point[1] for point in projected.values()) - min(point[1] for point in projected.values()),
+        1.0,
+    )
+    epsilon = span * span * 1e-14
+    triangles: List[Tuple[int, int, int]] = []
+    guard = 0
+    while len(polygon) > 3 and guard < len(loop) * len(loop):
+        guard += 1
+        clipped = False
+        for i, current in enumerate(polygon):
+            previous = polygon[i - 1]
+            following = polygon[(i + 1) % len(polygon)]
+            a, b, c = projected[previous], projected[current], projected[following]
+            if _cross_2d(a, b, c) * orientation <= epsilon:
+                continue
+            if any(
+                _strictly_inside_triangle_2d(projected[other], a, b, c, orientation, epsilon)
+                for other in polygon
+                if other not in {previous, current, following}
+            ):
+                continue
+            triangles.append((previous, current, following))
+            polygon.pop(i)
+            clipped = True
+            break
+        if not clipped:
+            return None
+    if len(polygon) == 3:
+        triangles.append((polygon[0], polygon[1], polygon[2]))
+    return triangles
+
+
+def repair_stl(
+    source: Path,
+    output: Path,
+    scale: float,
+    weld_tolerance_m: float = 0.001,
+    max_hole_size_m: float = 2.0,
+    triangle_limit: int = 2_000_000,
+) -> RepairResult:
+    """Repair small, simple STL defects without altering the source file.
+
+    The conservative repair welds near-coincident points, removes degenerate
+    and duplicate faces, and caps simple approximately planar boundary loops.
+    It deliberately does not guess how to repair non-manifold intersections or
+    large/non-planar missing surfaces.
+    """
+    source = Path(source).expanduser().resolve()
+    output = Path(output).expanduser().resolve()
+    if source == output:
+        raise ValueError("ไฟล์ซ่อมต้องเป็นไฟล์ใหม่ ระบบจะไม่เขียนทับต้นฉบับ")
+    if scale <= 0 or weld_tolerance_m < 0 or max_hole_size_m <= 0:
+        raise ValueError("Scale และขนาดรูต้องมากกว่า 0; ระยะเชื่อมจุดต้องไม่ติดลบ")
+    before = analyse_stl(source, scale, run_external=False, topology_triangle_limit=triangle_limit)
+    if before.triangles > triangle_limit:
+        raise ValueError(
+            f"โมเดลมี {before.triangles:,} triangles เกินขีดจำกัดซ่อมอัตโนมัติ {triangle_limit:,}; "
+            "ให้ลดความละเอียด STL หรือใช้เครื่องมือซ่อมเฉพาะทาง"
+        )
+    diagonal_m = max(before.bounds.diagonal, 1e-12)
+    if weld_tolerance_m > diagonal_m * 0.01:
+        raise ValueError("ระยะเชื่อมจุดมากกว่า 1% ของขนาดโมเดล เสี่ยงทำให้รูปทรงเสีย")
+    tolerance_raw = weld_tolerance_m / scale
+    max_hole_raw = max_hole_size_m / scale
+
+    raw_triangles = list(iter_stl_triangles(source))
+    exact_vertices = {point for triangle in raw_triangles for point in triangle}
+    vertices: List[Vec3] = []
+    buckets: Dict[Tuple[int, int, int], List[int]] = defaultdict(list)
+    exact_map: Dict[Vec3, int] = {}
+
+    def vertex_id(point: Vec3) -> int:
+        if tolerance_raw <= 0:
+            existing = exact_map.get(point)
+            if existing is not None:
+                return existing
+            index = len(vertices)
+            vertices.append(point)
+            exact_map[point] = index
+            return index
+        cell = tuple(math.floor(value / tolerance_raw) for value in point)
+        best: Optional[int] = None
+        best_distance = tolerance_raw * tolerance_raw
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for candidate in buckets.get((cell[0] + dx, cell[1] + dy, cell[2] + dz), ()):
+                        distance = sum((point[i] - vertices[candidate][i]) ** 2 for i in range(3))
+                        if distance <= best_distance:
+                            best, best_distance = candidate, distance
+        if best is not None:
+            return best
+        index = len(vertices)
+        vertices.append(point)
+        buckets[cell].append(index)
+        return index
+
+    faces: List[Tuple[int, int, int]] = []
+    face_keys = set()
+    removed_degenerate = 0
+    removed_duplicate = 0
+    for triangle in raw_triangles:
+        face = tuple(vertex_id(point) for point in triangle)
+        if len(set(face)) < 3:
+            removed_degenerate += 1
+            continue
+        a, b, c = (vertices[index] for index in face)
+        if _norm(_cross(_sub(b, a), _sub(c, a))) <= 1e-24:
+            removed_degenerate += 1
+            continue
+        key = tuple(sorted(face))
+        if key in face_keys:
+            removed_duplicate += 1
+            continue
+        face_keys.add(key)
+        faces.append(face)  # type: ignore[arg-type]
+
+    edge_faces: Dict[Tuple[int, int], List[Tuple[int, int, int]]] = defaultdict(list)
+    for face_index, face in enumerate(faces):
+        for start, end in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+            edge_faces[tuple(sorted((start, end)))].append((face_index, start, end))
+    open_edges = {edge: records[0] for edge, records in edge_faces.items() if len(records) == 1}
+    adjacency: Dict[int, List[int]] = defaultdict(list)
+    for start, end in open_edges:
+        adjacency[start].append(end)
+        adjacency[end].append(start)
+
+    remaining = set(open_edges)
+    loops: List[List[int]] = []
+    complex_components = 0
+    while remaining:
+        seed = next(iter(remaining))
+        stack = [seed[0], seed[1]]
+        component_vertices = set()
+        while stack:
+            current = stack.pop()
+            if current in component_vertices:
+                continue
+            component_vertices.add(current)
+            stack.extend(adjacency[current])
+        component_edges = {edge for edge in remaining if edge[0] in component_vertices}
+        remaining -= component_edges
+        if (
+            len(component_edges) != len(component_vertices)
+            or any(len(adjacency[vertex]) != 2 for vertex in component_vertices)
+        ):
+            complex_components += 1
+            continue
+        first = next(iter(component_vertices))
+        loop = [first]
+        previous = -1
+        current = first
+        for _ in range(len(component_vertices) + 1):
+            candidates = [vertex for vertex in adjacency[current] if vertex != previous]
+            if not candidates:
+                break
+            following = candidates[0]
+            if following == first:
+                break
+            loop.append(following)
+            previous, current = current, following
+        if len(loop) == len(component_vertices) and first in adjacency[current]:
+            loops.append(loop)
+        else:
+            complex_components += 1
+
+    added_faces: List[Tuple[int, int, int]] = []
+    filled = 0
+    too_large = 0
+    not_planar = 0
+    triangulation_failed = complex_components
+    for loop in loops:
+        points = [vertices[index] for index in loop]
+        spans = [max(point[i] for point in points) - min(point[i] for point in points) for i in range(3)]
+        diameter = math.sqrt(sum(value * value for value in spans))
+        if diameter > max_hole_raw:
+            too_large += 1
+            continue
+        centroid = tuple(sum(point[i] for point in points) / len(points) for i in range(3))
+        normal = (0.0, 0.0, 0.0)
+        for i, point in enumerate(points):
+            following = points[(i + 1) % len(points)]
+            normal = (
+                normal[0] + (point[1] - following[1]) * (point[2] + following[2]),
+                normal[1] + (point[2] - following[2]) * (point[0] + following[0]),
+                normal[2] + (point[0] - following[0]) * (point[1] + following[1]),
+            )
+        normal_length = _norm(normal)
+        if normal_length <= 1e-20:
+            not_planar += 1
+            continue
+        unit_normal = tuple(value / normal_length for value in normal)
+        max_distance = max(abs(_dot(_sub(point, centroid), unit_normal)) for point in points)
+        planar_limit = max(tolerance_raw * 5, diameter * 0.02, 1e-10)
+        if max_distance > planar_limit:
+            not_planar += 1
+            continue
+
+        same_direction = 0
+        opposite_direction = 0
+        for i, start in enumerate(loop):
+            end = loop[(i + 1) % len(loop)]
+            _, existing_start, existing_end = open_edges[tuple(sorted((start, end)))]
+            if (existing_start, existing_end) == (start, end):
+                same_direction += 1
+            else:
+                opposite_direction += 1
+        cap_loop = list(reversed(loop)) if same_direction >= opposite_direction else list(loop)
+        cap_normal = tuple(-value for value in unit_normal) if same_direction >= opposite_direction else unit_normal
+        triangles = _triangulate_loop(vertices, cap_loop, cap_normal)
+        if not triangles:
+            triangulation_failed += 1
+            continue
+        added_faces.extend(triangles)
+        filled += 1
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    _write_binary_stl(output, vertices, faces + added_faces)
+    after = analyse_stl(output, scale, run_external=False, topology_triangle_limit=triangle_limit)
+    return RepairResult(
+        source=str(source),
+        output=str(output),
+        weld_tolerance_m=weld_tolerance_m,
+        max_hole_size_m=max_hole_size_m,
+        welded_vertices=max(0, len(exact_vertices) - len(vertices)),
+        removed_degenerate=removed_degenerate,
+        removed_duplicate_faces=removed_duplicate,
+        boundary_loops_found=len(loops) + complex_components,
+        holes_filled=filled,
+        holes_skipped_too_large=too_large,
+        holes_skipped_not_planar=not_planar,
+        holes_skipped_complex=triangulation_failed,
+        triangles_added=len(added_faces),
+        report_before=before,
+        report_after=after,
     )
 
 
@@ -1011,6 +1365,7 @@ roots ();
 
 def _allrun(config: CaseConfig, stl_name: str) -> str:
     dt = foam_number(config.write_interval)
+    stl_stem = Path(stl_name).stem
     return f"""#!/bin/sh
 set -eu
 cd "${{0%/*}}" || exit 1
@@ -1022,8 +1377,17 @@ if [ -z "${{WM_PROJECT_DIR:-}}" ]; then
 fi
 . "$WM_PROJECT_DIR/bin/tools/RunFunctions"
 
+SURFACE_CHECK_RUN_ID="allrun-$(date +%Y%m%d-%H%M%S)-$$"
+export SURFACE_CHECK_RUN_ID
+organizeSurfaceCheck()
+{{
+    ./organizeSurfaceCheckOutput.sh "{stl_stem}" >/dev/null 2>&1 || true
+}}
+trap organizeSurfaceCheck 0 1 2 15
+
 echo "[1/9] Checking STL"
 runApplication surfaceCheck "constant/triSurface/{stl_name}"
+organizeSurfaceCheck
 echo "[2/9] Extracting surface features"
 runApplication surfaceFeatures
 echo "[3/9] Creating {config.base_cells:,} base cells"
@@ -1107,11 +1471,14 @@ df -h .
 ```
 
 `surfaceCheck` and `checkMesh` must be reviewed before accepting engineering results.
+Connected-part OBJ files, zone VTK, and surface-check logs are grouped by run in
+`diagnostics/surfaceCheck/<run-id>/` instead of being left in the case root.
 The RAM/disk figures are conservative planning estimates, not solver guarantees.
 """
 
 
 def _preflight(config: CaseConfig, stl_name: str) -> str:
+    stl_stem = Path(stl_name).stem
     return f"""#!/bin/sh
 set -eu
 cd "${{0%/*}}" || exit 1
@@ -1124,8 +1491,25 @@ echo "RAM available:"
 free -h || true
 echo "Disk available:"
 df -h .
-surfaceCheck "constant/triSurface/{stl_name}" | tee log.preflight.surfaceCheck
-echo "Preflight passed. Review log.preflight.surfaceCheck, then run ./Allrun"
+SURFACE_CHECK_RUN_ID="preflight-$(date +%Y%m%d-%H%M%S)-$$"
+export SURFACE_CHECK_RUN_ID
+organizeSurfaceCheck()
+{{
+    ./organizeSurfaceCheckOutput.sh "{stl_stem}" >/dev/null 2>&1 || true
+}}
+trap organizeSurfaceCheck 0 1 2 15
+if surfaceCheck "constant/triSurface/{stl_name}" > log.preflight.surfaceCheck 2>&1; then
+    surface_status=0
+else
+    surface_status=$?
+fi
+cat log.preflight.surfaceCheck
+organizeSurfaceCheck
+if [ "$surface_status" -ne 0 ]; then
+    echo "ERROR: surfaceCheck failed with status $surface_status" >&2
+    exit "$surface_status"
+fi
+echo "Preflight passed. Review diagnostics/surfaceCheck/$SURFACE_CHECK_RUN_ID, then run ./Allrun"
 """
 
 
@@ -1181,6 +1565,9 @@ def create_case(
         (target / "constant/triSurface").mkdir(parents=True)
         (target / "0").mkdir(parents=True)
         shutil.copy2(config.stl_path, target / "constant/triSurface" / stl_name)
+        repair_sidecar = Path(config.stl_path).with_suffix(".repair.json")
+        if repair_sidecar.is_file():
+            shutil.copy2(repair_sidecar, target / "geometry-repair.json")
         for name in ("fvSchemes", "fvSolution"):
             shutil.copy2(template / "system" / name, target / "system" / name)
         for source in (template / "0").glob("*.orig"):
@@ -1205,6 +1592,9 @@ def create_case(
             path = target / filename
             path.write_text(content, encoding="utf-8")
             path.chmod(0o755)
+        organizer = target / "organizeSurfaceCheckOutput.sh"
+        shutil.copy2(template / "organizeSurfaceCheckOutput.sh", organizer)
+        organizer.chmod(0o755)
         (target / "SERVER_COMMANDS.md").write_text(_server_readme(config, report), encoding="utf-8")
         manifest = {
             "schema_version": 1,

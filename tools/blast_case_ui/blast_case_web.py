@@ -34,6 +34,7 @@ from blast_case_builder import (
     create_case,
     mesh_divisions,
     parse_probes,
+    repair_stl,
     validate_config,
 )
 
@@ -47,7 +48,12 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024 * 1024
 
 class AppState:
     def __init__(self) -> None:
-        self.upload_dir = Path(tempfile.mkdtemp(prefix="blast-case-ui-uploads-"))
+        # Keep temporary uploads inside the repository so Docker Desktop can
+        # mount them on macOS.  /var/folders and /private/tmp are not shared by
+        # every Docker Desktop/Colima configuration.
+        runtime_parent = DEFAULT_TEMPLATE / "generatedCases"
+        runtime_parent.mkdir(parents=True, exist_ok=True)
+        self.upload_dir = Path(tempfile.mkdtemp(prefix=".ui-work-", dir=runtime_parent))
         self.reports: Dict[Tuple[str, float], StlReport] = {}
         self.lock = threading.Lock()
 
@@ -127,11 +133,56 @@ def payload_to_config(data: Dict[str, Any]) -> CaseConfig:
 
 
 def report_payload(report: StlReport) -> Dict[str, Any]:
+    span = report.bounds.span
+    if report.errors:
+        status = "พบจุดที่ควรซ่อมก่อนสร้าง Mesh"
+    elif report.warnings:
+        status = "ใช้งานได้ แต่มีคำแนะนำให้ตรวจเพิ่ม"
+    else:
+        status = "โมเดลพร้อมใช้งาน"
+    open_edges = report.open_edges if report.open_edges is not None else -1
+    non_manifold = report.non_manifold_edges if report.non_manifold_edges is not None else -1
+    friendly = "\n".join(
+        [
+            f"ผลตรวจ: {status}",
+            f"ขนาดโมเดล: {span[0]:.4g} × {span[1]:.4g} × {span[2]:.4g} เมตร",
+            f"จำนวนผิวสามเหลี่ยม: {report.triangles:,}",
+            f"ขอบที่ยังขาด/เป็นรู: {open_edges:,}" if open_edges >= 0 else "ขอบที่ยังขาด/เป็นรู: โมเดลใหญ่ ให้ตรวจซ้ำบน Server",
+            f"ขอบที่เชื่อมซ้อนผิดปกติ: {non_manifold:,}" if non_manifold >= 0 else "ขอบที่เชื่อมซ้อนผิดปกติ: โมเดลใหญ่ ให้ตรวจซ้ำบน Server",
+            f"ผิวสามเหลี่ยมที่เสีย: {report.degenerate_triangles:,}",
+            "คำแนะนำ: กด ‘ซ่อมและตั้งค่าทั้งหมดให้ฉัน’" if report.errors else "ขั้นต่อไป: ตรวจตำแหน่งระเบิดและจุดวัด แล้วสร้างไฟล์สำหรับ Server",
+        ]
+    )
     return {
+        "friendly_summary": friendly,
         "summary": report.readable_summary(),
         "errors": report.errors,
         "warnings": report.warnings,
         "report": asdict(report),
+    }
+
+
+def automatic_values(report: StlReport, data: Dict[str, Any]) -> Dict[str, Any]:
+    domain = auto_domain(
+        report.bounds,
+        _number(data, "horizontal_buffer"),
+        _number(data, "top_buffer"),
+    )
+    target_cell = _number(data, "target_cell")
+    levels = auto_surface_levels(target_cell, report.bounds)
+    buffer = _number(data, "horizontal_buffer")
+    clearance = max(0.5, min(1.0, domain.span[2] * 0.02))
+    return {
+        "domain_min": domain.minimum,
+        "domain_max": domain.maximum,
+        "divisions": mesh_divisions(domain, target_cell),
+        "surface_levels": levels,
+        "feature_level": levels[0],
+        "location": (
+            domain.minimum[0] + buffer * 0.25,
+            domain.minimum[1] + buffer * 0.25,
+            domain.minimum[2] + clearance,
+        ),
     }
 
 
@@ -187,6 +238,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._upload()
             elif path == "/api/check":
                 self._check()
+            elif path == "/api/repair-auto":
+                self._repair_auto()
             elif path == "/api/validate":
                 self._validate()
             elif path == "/api/export":
@@ -226,28 +279,53 @@ class Handler(BaseHTTPRequestHandler):
         report = STATE.report(stl, scale, external=True)
         result = {"ok": not report.errors, **report_payload(report)}
         if data.get("auto"):
-            domain = auto_domain(
-                report.bounds,
-                _number(data, "horizontal_buffer"),
-                _number(data, "top_buffer"),
-            )
-            target_cell = _number(data, "target_cell")
-            levels = auto_surface_levels(target_cell, report.bounds)
-            buffer = _number(data, "horizontal_buffer")
-            clearance = max(0.5, min(1.0, domain.span[2] * 0.02))
-            result["auto_values"] = {
-                "domain_min": domain.minimum,
-                "domain_max": domain.maximum,
-                "divisions": mesh_divisions(domain, target_cell),
-                "surface_levels": levels,
-                "feature_level": levels[0],
-                "location": (
-                    domain.minimum[0] + buffer * 0.25,
-                    domain.minimum[1] + buffer * 0.25,
-                    domain.minimum[2] + clearance,
-                ),
-            }
+            result["auto_values"] = automatic_values(report, data)
         self._json(200, result)
+
+    def _repair_auto(self) -> None:
+        data = self._read_json()
+        source = Path(str(data.get("stl_path", "")))
+        scale = _number(data, "scale")
+        safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", source.stem) or "model"
+        output = STATE.upload_dir / f"{safe_stem}_repaired.stl"
+        counter = 1
+        while output.exists():
+            output = STATE.upload_dir / f"{safe_stem}_repaired_{counter}.stl"
+            counter += 1
+        repair = repair_stl(
+            source,
+            output,
+            scale,
+            weld_tolerance_m=_number(data, "weld_tolerance"),
+            max_hole_size_m=_number(data, "max_hole_size"),
+        )
+        output.with_suffix(".repair.json").write_text(
+            json.dumps(asdict(repair), indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        # Run the independent OpenFOAM/Docker check on the repaired copy too.
+        report = STATE.report(output, scale, external=True)
+        self._json(
+            200,
+            {
+                "ok": not report.errors,
+                "path": str(output),
+                "repair_summary": repair.readable_summary(),
+                "repair": {
+                    "welded_vertices": repair.welded_vertices,
+                    "removed_degenerate": repair.removed_degenerate,
+                    "removed_duplicate_faces": repair.removed_duplicate_faces,
+                    "boundary_loops_found": repair.boundary_loops_found,
+                    "holes_filled": repair.holes_filled,
+                    "holes_skipped_too_large": repair.holes_skipped_too_large,
+                    "holes_skipped_not_planar": repair.holes_skipped_not_planar,
+                    "holes_skipped_complex": repair.holes_skipped_complex,
+                    "triangles_added": repair.triangles_added,
+                },
+                **report_payload(report),
+                "auto_values": automatic_values(report, data),
+            },
+        )
 
     def _validate(self) -> None:
         data = self._read_json()

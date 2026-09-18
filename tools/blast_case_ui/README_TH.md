@@ -55,11 +55,11 @@ Launcher จะไม่โหลด Tk บน macOS และใช้ Browser 
 ## Workflow
 
 1. เลือก Binary หรือ ASCII STL และกำหนด scale
-2. กด **ตรวจ Surface** เพื่ออ่าน bounds, ขนาด, open edges,
-   non-manifold edges และ degenerate triangles ถ้า environment มี OpenFOAM
-   โปรแกรมจะเรียก `surfaceCheck` เพิ่มด้วย
-3. กด **Auto Domain + Mesh** เพื่อสร้าง domain, จำนวน base cells,
-   `locationInMesh` เริ่มต้น และระดับ refine ผิว
+2. กด **ซ่อมและตั้งค่าทั้งหมดให้ฉัน** เพื่อเชื่อมจุดที่เกือบติดกัน ลบผิวเสีย/ซ้ำ
+   และปิดรูขนาดเล็กที่เป็นวงปิดและเกือบแบน ระบบสร้างไฟล์ใหม่โดยไม่แก้ต้นฉบับ
+3. ระบบตรวจโมเดลที่ซ่อมแล้วด้วย internal checker และ OpenFOAM/Docker
+   `surfaceCheck` จากนั้นสร้างพื้นที่คำนวณ จำนวนช่อง `locationInMesh` และความละเอียด
+   ใกล้อาคารให้อัตโนมัติ
 4. ตรวจ/ปรับค่าในแท็บ Domain และ Mesh
 5. กำหนดตำแหน่ง มวล และ charge refinement ของ C4
 6. กำหนด probes, ระนาบ, simulation time, time step และ write interval
@@ -76,6 +76,9 @@ UI สร้าง directory ใหม่และจะไม่เขียน
 - `Allrun` สำหรับ surface, mesh, charge, solver และ sampling
 - `SERVER_COMMANDS.md` พร้อมคำสั่งรันและค่าประมาณทรัพยากร
 - `<case-name>.tar.gz` สำหรับส่งขึ้น server หากเปิดตัวเลือก archive
+- ผลจาก `surfaceCheck` จะถูกรวมตามรอบไว้ใน
+  `diagnostics/surfaceCheck/<run-id>/`; ไฟล์ชิ้นส่วน `.obj` อยู่ในโฟลเดอร์ย่อย
+  `connectedParts/` จึงไม่กระจายในโฟลเดอร์งาน
 
 ค่าเริ่มต้นใช้ MPI 10 ranks และจำกัด dynamic mesh ที่ 8 ล้าน cells ซึ่งประเมิน
 RAM แบบ conservative ประมาณ 37 GiB โปรแกรมจะแจ้งเตือนเมื่อค่าที่กำหนดอาจเสี่ยง
@@ -87,5 +90,7 @@ RAM แบบ conservative ประมาณ 37 GiB โปรแกรมจะ
 - ต้องตรวจ `surfaceCheck`, `checkMesh`, Courant number และผล mesh จริงบน server
 - `locationInMesh`, charge และ probes ต้องอยู่ในอากาศ
 - โมเดลที่มี open/non-manifold edges จะถูกบล็อกไม่ให้ Export โดยค่าเริ่มต้น
+- Auto repair จะไม่เดาการซ่อมรูขนาดใหญ่ ผิวที่ไม่แบน หรือผิวซ้อนแบบ
+  non-manifold; กรณีเหล่านี้ต้องปรับค่าอย่างระมัดระวังหรือซ่อมใน Blender/MeshLab
 - Case นี้ถือว่าอาคารเป็น rigid wall หากต้องการ deformation/failure ให้ใช้
   `blastFSIFoam` พร้อม solid mesh และ material model

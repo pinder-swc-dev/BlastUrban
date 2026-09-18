@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>BlastUrban 3-D Case Builder</title>
+  <title>BlastUrban — เตรียมงานจำลองแรงระเบิด</title>
   <style>
     :root { color-scheme: light; --ink:#17202a; --muted:#667085; --line:#d0d5dd; --blue:#175cd3; --blue2:#eff8ff; --red:#b42318; --redbg:#fef3f2; --green:#067647; --greenbg:#ecfdf3; --amber:#b54708; --amberbg:#fffaeb; }
     * { box-sizing:border-box; }
@@ -41,54 +41,58 @@
   </style>
 </head>
 <body>
-<header><h1>BlastUrban 3-D Case Builder</h1><span>macOS Browser UI · OpenFOAM Docker/Linux · 10 CPU / 64 GB profile</span></header>
+<header><h1>BlastUrban — เตรียมงานจำลองแรงระเบิด</h1><span>ทำงานบน Mac · ส่งไปคำนวณบน Server 10 CPU / RAM 64 GB</span></header>
 <main>
   <div class="steps">
     <section class="card">
-      <h2><b>1</b>นำเข้าและตรวจ STL</h2>
+      <h2><b>1</b>เลือกโมเดล — ระบบช่วยตรวจและซ่อมให้</h2>
       <div class="grid">
         <label class="wide">เลือก STL จาก Mac<input id="stl_file" type="file" accept=".stl,model/stl"></label>
-        <label>Scale<input id="scale" type="number" step="any" value="1"></label>
+        <label>ตัวคูณขนาด<input id="scale" type="number" step="any" value="1"></label>
         <label class="wide">หรือระบุ path เต็ม<input id="stl_path" type="text"></label>
         <label>หน่วย<input value="m=1, cm=.01, mm=.001" readonly></label>
-        <label>Buffer รอบอาคาร (m)<input id="horizontal_buffer" type="number" step="any" value="20"></label>
-        <label>Buffer ด้านบน (m)<input id="top_buffer" type="number" step="any" value="20"></label>
-        <label>Target base cell (m)<input id="target_cell" type="number" step="any" value="1.5"></label>
+        <label>เว้นที่รอบอาคาร (m)<input id="horizontal_buffer" type="number" step="any" value="20"></label>
+        <label>เว้นที่เหนืออาคาร (m)<input id="top_buffer" type="number" step="any" value="20"></label>
+        <label>ขนาดช่องพื้นฐาน (m)<input id="target_cell" type="number" step="any" value="1.5"></label>
+        <label>เชื่อมจุดที่ห่างไม่เกิน (m)<input id="weld_tolerance" type="number" step="any" value="0.001"></label>
+        <label>ปิดรูที่กว้างไม่เกิน (m)<input id="max_hole_size" type="number" step="any" value="2"></label>
       </div>
       <div class="buttons">
-        <button onclick="checkSurface(false)">ตรวจ Surface</button>
-        <button onclick="checkSurface(true)">ตรวจ + Auto Domain/Mesh</button>
+        <button class="success" onclick="repairAndAuto()">✨ ซ่อมและตั้งค่าทั้งหมดให้ฉัน</button>
+        <button class="secondary" onclick="checkSurface(false)">ตรวจโมเดลอย่างเดียว</button>
+        <button class="secondary" onclick="checkSurface(true)">จัดพื้นที่และความละเอียดใหม่</button>
       </div>
-      <p class="hint">ไฟล์จากช่องเลือกจะถูกคัดลอกชั่วคราวเฉพาะระหว่างเปิดโปรแกรม แล้วจึงคัดลอกเข้า case ตอน Export</p>
+      <p class="hint">ระบบจะสร้างไฟล์ที่ซ่อมแล้วเป็นไฟล์ใหม่เสมอ ไฟล์ต้นฉบับจะไม่ถูกแก้ไข · ค่า 0.001 m เหมาะกับรอยต่อเล็กประมาณ 1 mm</p>
       <pre id="surface_output" class="output">รอเลือก STL และตรวจสอบ…</pre>
+      <details><summary>ดูรายละเอียดสำหรับผู้เชี่ยวชาญ</summary><pre id="technical_output" class="output">ยังไม่มีข้อมูล</pre></details>
     </section>
 
     <section class="card">
-      <h2><b>2</b>Domain และ Mesh</h2>
+      <h2><b>2</b>พื้นที่คำนวณและความละเอียด</h2>
       <div class="grid three">
-        <label>X min (m)<input id="xmin" type="number" step="any" value="-20"></label>
-        <label>Y min (m)<input id="ymin" type="number" step="any" value="-20"></label>
-        <label>Z min / ground (m)<input id="zmin" type="number" step="any" value="0"></label>
-        <label>X max (m)<input id="xmax" type="number" step="any" value="90"></label>
-        <label>Y max (m)<input id="ymax" type="number" step="any" value="95"></label>
-        <label>Z max (m)<input id="zmax" type="number" step="any" value="55"></label>
-        <label>Nx<input id="nx" type="number" value="74"></label>
-        <label>Ny<input id="ny" type="number" value="77"></label>
-        <label>Nz<input id="nz" type="number" value="37"></label>
-        <label>Wall level min<input id="surface_min" type="number" value="2"></label>
-        <label>Wall level max<input id="surface_max" type="number" value="3"></label>
-        <label>Feature level<input id="feature_level" type="number" value="2"></label>
+        <label>ขอบซ้าย X (m)<input id="xmin" type="number" step="any" value="-20"></label>
+        <label>ขอบหน้า Y (m)<input id="ymin" type="number" step="any" value="-20"></label>
+        <label>ระดับพื้น Z (m)<input id="zmin" type="number" step="any" value="0"></label>
+        <label>ขอบขวา X (m)<input id="xmax" type="number" step="any" value="90"></label>
+        <label>ขอบหลัง Y (m)<input id="ymax" type="number" step="any" value="95"></label>
+        <label>ความสูงบนสุด Z (m)<input id="zmax" type="number" step="any" value="55"></label>
+        <label>จำนวนช่องแนว X<input id="nx" type="number" value="74"></label>
+        <label>จำนวนช่องแนว Y<input id="ny" type="number" value="77"></label>
+        <label>จำนวนช่องแนว Z<input id="nz" type="number" value="37"></label>
+        <label>ละเอียดใกล้อาคาร — เริ่ม<input id="surface_min" type="number" value="2"></label>
+        <label>ละเอียดใกล้อาคาร — สูงสุด<input id="surface_max" type="number" value="3"></label>
+        <label>เก็บความคมของมุม<input id="feature_level" type="number" value="2"></label>
       </div>
       <details>
-        <summary>Advanced mesh limits</summary>
+        <summary>ค่าขั้นสูง — ปกติไม่ต้องแก้</summary>
         <div class="grid" style="margin-top:12px">
-          <label>snappy max cells<input id="snappy_cells" type="number" value="6000000"></label>
-          <label>Dynamic max cells<input id="dynamic_cells" type="number" value="8000000"></label>
-          <label>Dynamic levels<input id="dynamic_levels" type="number" value="2"></label>
-          <label>Refine interval<input id="refine_interval" type="number" value="5"></label>
+          <label>จำนวนช่องสูงสุดตอนสร้างอาคาร<input id="snappy_cells" type="number" value="6000000"></label>
+          <label>จำนวนช่องสูงสุดตอนคำนวณ<input id="dynamic_cells" type="number" value="8000000"></label>
+          <label>เพิ่มความละเอียดระหว่างคำนวณ<input id="dynamic_levels" type="number" value="2"></label>
+          <label>ตรวจเพิ่มความละเอียดทุกกี่รอบ<input id="refine_interval" type="number" value="5"></label>
         </div>
       </details>
-      <h3>locationInMesh — ต้องอยู่ในอากาศ</h3>
+      <h3>จุดอากาศอ้างอิง — ระบบเลือกให้อัตโนมัติ อย่าวางไว้ในอาคาร</h3>
       <div class="grid three">
         <label>X<input id="location_x" type="number" step="any" value="-10"></label>
         <label>Y<input id="location_y" type="number" step="any" value="-10"></label>
@@ -97,56 +101,56 @@
     </section>
 
     <section class="card">
-      <h2><b>3</b>ตำแหน่งและมวลระเบิด</h2>
+      <h2><b>3</b>ตั้งค่าระเบิด</h2>
       <div class="grid three">
-        <label>Charge X (m)<input id="charge_x" type="number" step="any" value="35"></label>
-        <label>Charge Y (m)<input id="charge_y" type="number" step="any" value="20"></label>
-        <label>Charge Z (m)<input id="charge_z" type="number" step="any" value="1"></label>
+        <label>ตำแหน่ง X (m)<input id="charge_x" type="number" step="any" value="35"></label>
+        <label>ตำแหน่ง Y (m)<input id="charge_y" type="number" step="any" value="20"></label>
+        <label>ความสูง Z (m)<input id="charge_z" type="number" step="any" value="1"></label>
         <label>มวล C4 (kg)<input id="mass" type="number" step="any" value="10"></label>
-        <label>Density (kg/m³)<input id="density" type="number" step="any" value="1601"></label>
-        <label>Charge refine level<input id="charge_level" type="number" value="6"></label>
-        <label>Plane X<input id="plane_x" type="number" step="any" value="35"></label>
-        <label>Plane Y<input id="plane_y" type="number" step="any" value="20"></label>
-        <label>Plane Z<input id="plane_z" type="number" step="any" value="1"></label>
+        <label>ความหนาแน่น C4 (kg/m³)<input id="density" type="number" step="any" value="1601"></label>
+        <label>ความละเอียดรอบระเบิด<input id="charge_level" type="number" value="6"></label>
+        <label>ระนาบดูผล X<input id="plane_x" type="number" step="any" value="35"></label>
+        <label>ระนาบดูผล Y<input id="plane_y" type="number" step="any" value="20"></label>
+        <label>ระนาบดูผล Z<input id="plane_z" type="number" step="any" value="1"></label>
       </div>
       <div class="buttons">
-        <button class="secondary" onclick="autoCharge()">Auto charge refinement</button>
-        <button class="secondary" onclick="planesAtCharge()">ให้ระนาบผ่านจุดระเบิด</button>
+        <button class="secondary" onclick="autoCharge()">เลือกความละเอียดรอบระเบิดให้</button>
+        <button class="secondary" onclick="planesAtCharge()">วางระนาบดูผลตรงจุดระเบิด</button>
       </div>
       <p id="charge_summary" class="hint"></p>
     </section>
 
     <section class="card">
-      <h2><b>4</b>Probes เวลา และผลลัพธ์</h2>
+      <h2><b>4</b>จุดวัดและระยะเวลาคำนวณ</h2>
       <div class="grid">
-        <label class="full">Pressure probes — หนึ่งจุดต่อบรรทัด: x y z<textarea id="probes">35 15 1  # south
+        <label class="full">จุดวัดแรงดัน — หนึ่งจุดต่อบรรทัด: x y z<textarea id="probes">35 15 1  # south
 40 20 1  # east
 35 25 1  # near wall</textarea></label>
-        <label>End time (s)<input id="end_time" type="number" step="any" value="0.0125"></label>
-        <label>Initial deltaT (s)<input id="delta_t" type="number" step="any" value="5e-8"></label>
-        <label>Max deltaT (s)<input id="max_delta_t" type="number" step="any" value="2.5e-7"></label>
-        <label>Max Courant<input id="max_co" type="number" step="any" value="0.3"></label>
-        <label>Write interval (s)<input id="write_interval" type="number" step="any" value="2.5e-5"></label>
-        <label>MPI ranks<input id="mpi" type="number" value="10"></label>
-        <label>Ambient pressure (Pa)<input id="ambient_pressure" type="number" step="any" value="101298"></label>
-        <label>Pressure iso (Pa)<input id="iso_pressure" type="number" step="any" value="110000"></label>
+        <label>คำนวณถึงเวลา (s)<input id="end_time" type="number" step="any" value="0.0125"></label>
+        <label>ก้าวเวลาเริ่มต้น (s)<input id="delta_t" type="number" step="any" value="5e-8"></label>
+        <label>ก้าวเวลาสูงสุด (s)<input id="max_delta_t" type="number" step="any" value="2.5e-7"></label>
+        <label>ค่าคุมความเสถียร<input id="max_co" type="number" step="any" value="0.3"></label>
+        <label>บันทึกผลทุก (s)<input id="write_interval" type="number" step="any" value="2.5e-5"></label>
+        <label>จำนวน CPU<input id="mpi" type="number" value="10"></label>
+        <label>แรงดันอากาศเริ่มต้น (Pa)<input id="ambient_pressure" type="number" step="any" value="101298"></label>
+        <label>แรงดันสำหรับดูแนวคลื่น (Pa)<input id="iso_pressure" type="number" step="any" value="110000"></label>
       </div>
       <div class="checks"><label><input id="binary" type="checkbox" checked>เขียน full fields แบบ binary</label></div>
     </section>
 
     <section class="card">
-      <h2><b>5</b>ตรวจและ Export สำหรับ Server</h2>
+      <h2><b>5</b>ตรวจครั้งสุดท้ายและสร้างชุดไฟล์สำหรับ Server</h2>
       <div class="grid">
-        <label>ชื่อ Case<input id="case_name" value="urbanBlast3D"></label>
-        <label class="wide">Output parent folder<input id="output" type="text"></label>
+        <label>ชื่องาน<input id="case_name" value="urbanBlast3D"></label>
+        <label class="wide">โฟลเดอร์เก็บงาน<input id="output" type="text"></label>
       </div>
       <div class="checks">
-        <label><input id="archive" type="checkbox" checked>สร้าง .tar.gz</label>
-        <label><input id="allow_surface_errors" type="checkbox">อนุญาต Export เมื่อ STL มี surface errors</label>
+        <label><input id="archive" type="checkbox" checked>รวมเป็น .tar.gz สำหรับส่ง Server</label>
+        <label><input id="allow_surface_errors" type="checkbox">ยอมสร้างไฟล์แม้โมเดลยังมีรอยขาด (ไม่แนะนำ)</label>
       </div>
       <div class="buttons">
-        <button onclick="validateCase()">ตรวจ Config</button>
-        <button class="success" onclick="exportCase()">สร้าง Case + Server Package</button>
+        <button onclick="validateCase()">ตรวจความพร้อม</button>
+        <button class="success" onclick="exportCase()">สร้างชุดไฟล์สำหรับ Server</button>
       </div>
       <pre id="result_output" class="output">ยังไม่ได้ตรวจ Config</pre>
     </section>
@@ -155,7 +159,7 @@
 <div id="busy"><div><div class="spinner"></div><span id="busy_text">กำลังทำงาน…</span></div></div>
 <script>
   const ids = [
-    'stl_path','scale','horizontal_buffer','top_buffer','target_cell',
+    'stl_path','scale','horizontal_buffer','top_buffer','target_cell','weld_tolerance','max_hole_size',
     'xmin','ymin','zmin','xmax','ymax','zmax','nx','ny','nz',
     'surface_min','surface_max','feature_level','snappy_cells','dynamic_cells','dynamic_levels','refine_interval',
     'location_x','location_y','location_z','charge_x','charge_y','charge_z','mass','density','charge_level',
@@ -179,21 +183,32 @@
     const data=await api('/api/upload',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':safeName},body:file});
     el('stl_path').value=data.path; uploadedFileKey=key;
   }
+  function applyAuto(a) {
+    ['xmin','ymin','zmin'].forEach((id,i)=>el(id).value=a.domain_min[i]);
+    ['xmax','ymax','zmax'].forEach((id,i)=>el(id).value=a.domain_max[i]);
+    ['nx','ny','nz'].forEach((id,i)=>el(id).value=a.divisions[i]);
+    el('surface_min').value=a.surface_levels[0]; el('surface_max').value=a.surface_levels[1]; el('feature_level').value=a.feature_level;
+    ['location_x','location_y','location_z'].forEach((id,i)=>el(id).value=a.location[i]);
+  }
   async function checkSurface(auto) {
-    setBusy(true,auto?'กำลังตรวจ STL และสร้าง Domain/Mesh…':'กำลังตรวจ STL และเรียก Docker surfaceCheck…');
+    setBusy(true,auto?'กำลังตรวจและจัดพื้นที่คำนวณ…':'กำลังตรวจโมเดล…');
     try {
       await ensureUpload(); const payload=collect(); payload.auto=auto;
       const data=await api('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const kind=data.errors.length?'error':(data.warnings.length?'warning':'ok'); show('surface_output',data.summary,kind);
-      if(data.auto_values) {
-        const a=data.auto_values;
-        ['xmin','ymin','zmin'].forEach((id,i)=>el(id).value=a.domain_min[i]);
-        ['xmax','ymax','zmax'].forEach((id,i)=>el(id).value=a.domain_max[i]);
-        ['nx','ny','nz'].forEach((id,i)=>el(id).value=a.divisions[i]);
-        el('surface_min').value=a.surface_levels[0]; el('surface_max').value=a.surface_levels[1]; el('feature_level').value=a.feature_level;
-        ['location_x','location_y','location_z'].forEach((id,i)=>el(id).value=a.location[i]);
-      }
+      const kind=data.errors.length?'error':(data.warnings.length?'warning':'ok'); show('surface_output',data.friendly_summary,kind);
+      show('technical_output',data.summary,kind); if(data.auto_values) applyAuto(data.auto_values);
     } catch(error) { show('surface_output','ERROR: '+error.message,'error'); } finally { setBusy(false); }
+  }
+  async function repairAndAuto() {
+    setBusy(true,'กำลังซ่อมรอยขาด ตรวจซ้ำ และตั้งค่าพื้นที่ให้…');
+    try {
+      await ensureUpload(); const data=await api('/api/repair-auto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
+      el('stl_path').value=data.path; applyAuto(data.auto_values);
+      const kind=data.errors.length?'error':(data.warnings.length?'warning':'ok');
+      show('surface_output',data.repair_summary+'\n\n'+data.friendly_summary,kind);
+      show('technical_output',data.summary,kind);
+    } catch(error) { show('surface_output','ซ่อมอัตโนมัติไม่สำเร็จ: '+error.message+'\nไฟล์ต้นฉบับไม่ได้ถูกแก้ไข','error'); }
+    finally { setBusy(false); }
   }
   function autoCharge() {
     const base=Number(value('target_cell')), mass=Number(value('mass')), rho=Number(value('density'));
@@ -209,17 +224,17 @@
     setBusy(true,'กำลังตรวจ Config และตำแหน่งกับผิว STL…');
     try {
       await ensureUpload(); const data=await api('/api/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
-      let text=data.ok?'CONFIG OK — พร้อมสร้าง case\n':'ERROR\n';
+      let text=data.ok?'พร้อมใช้งาน — สร้างชุดไฟล์สำหรับ Server ได้\n':'ยังมีจุดที่ต้องแก้\n';
       data.errors.forEach(x=>text+='  • '+x+'\n'); if(data.warnings.length) { text+='\nWARNING\n'; data.warnings.forEach(x=>text+='  • '+x+'\n'); }
-      text+=`\nBase cells: ${data.base_cells.toLocaleString()}\nActual cell: (${data.actual_cell_size.map(x=>x.toPrecision(5)).join(' ')}) m\nCharge radius: ${data.charge_radius.toPrecision(6)} m\nRAM at cap ≈ ${data.estimate.ram_gib_at_dynamic_cap.toFixed(1)} GiB\nOutput frames ≈ ${Math.floor(data.estimate.frames).toLocaleString()}\nDisk worst-case planning ≈ ${data.estimate.disk_gib_at_dynamic_cap.toFixed(0)} GiB`;
+      text+=`\nจำนวนช่องเริ่มต้น: ${data.base_cells.toLocaleString()}\nขนาดช่องจริง: (${data.actual_cell_size.map(x=>x.toPrecision(5)).join(' ')}) m\nรัศมีระเบิด: ${data.charge_radius.toPrecision(6)} m\nRAM โดยประมาณเมื่อใช้เต็ม: ${data.estimate.ram_gib_at_dynamic_cap.toFixed(1)} GiB\nจำนวนช่วงที่บันทึก: ${Math.floor(data.estimate.frames).toLocaleString()}\nพื้นที่เก็บผลกรณีสูงสุด: ${data.estimate.disk_gib_at_dynamic_cap.toFixed(0)} GiB`;
       show('result_output',text,data.ok?(data.warnings.length?'warning':'ok'):'error'); return data.ok;
     } catch(error) { show('result_output','ERROR: '+error.message,'error'); return false; } finally { setBusy(false); }
   }
   async function exportCase() {
-    setBusy(true,'กำลังตรวจและสร้าง Case + Server package…');
+    setBusy(true,'กำลังตรวจและสร้างชุดไฟล์สำหรับ Server…');
     try {
       await ensureUpload(); const data=await api('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
-      let text=`สร้างสำเร็จ\nCase: ${data.target}\n`; if(data.archive) text+=`Archive: ${data.archive}\n`; text+='\nดูคำสั่งใน SERVER_COMMANDS.md';
+      let text=`สร้างงานสำเร็จ\nโฟลเดอร์งาน: ${data.target}\n`; if(data.archive) text+=`ไฟล์ส่ง Server: ${data.archive}\n`; text+='\nคำสั่งใช้งานอยู่ใน SERVER_COMMANDS.md';
       if(data.warnings.length) text+='\n\nWARNING\n'+data.warnings.map(x=>'  • '+x).join('\n'); show('result_output',text,data.warnings.length?'warning':'ok');
     } catch(error) { show('result_output','EXPORT ERROR: '+error.message,'error'); } finally { setBusy(false); }
   }
