@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BlastUrban 3-D Case Builder</title>
+  <style>
+    :root { color-scheme: light; --ink:#17202a; --muted:#667085; --line:#d0d5dd; --blue:#175cd3; --blue2:#eff8ff; --red:#b42318; --redbg:#fef3f2; --green:#067647; --greenbg:#ecfdf3; --amber:#b54708; --amberbg:#fffaeb; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#f2f4f7; color:var(--ink); font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    header { position:sticky; top:0; z-index:3; display:flex; justify-content:space-between; align-items:center; padding:15px 24px; color:white; background:#101828; box-shadow:0 2px 8px #0003; }
+    header h1 { margin:0; font-size:21px; } header span { color:#d0d5dd; font-size:13px; }
+    main { max-width:1180px; margin:22px auto 60px; padding:0 18px; }
+    .steps { display:grid; gap:16px; }
+    .card { background:white; border:1px solid #e4e7ec; border-radius:12px; padding:20px; box-shadow:0 1px 3px #10182812; }
+    .card h2 { margin:0 0 15px; font-size:18px; } .card h2 b { display:inline-grid; place-items:center; width:28px; height:28px; margin-right:7px; border-radius:50%; color:white; background:var(--blue); }
+    .grid { display:grid; grid-template-columns:repeat(4,minmax(145px,1fr)); gap:12px 16px; }
+    .grid.three { grid-template-columns:repeat(3,minmax(160px,1fr)); }
+    label { display:block; color:#344054; font-size:13px; font-weight:600; }
+    input, textarea { width:100%; margin-top:5px; padding:9px 10px; border:1px solid var(--line); border-radius:7px; color:var(--ink); background:white; font:14px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    input:focus, textarea:focus { outline:2px solid #84adff; border-color:var(--blue); }
+    textarea { min-height:110px; resize:vertical; }
+    .wide { grid-column:span 3; } .full { grid-column:1/-1; }
+    .buttons { display:flex; flex-wrap:wrap; gap:9px; margin-top:15px; }
+    button { border:0; border-radius:8px; padding:10px 15px; color:white; background:var(--blue); font-weight:650; cursor:pointer; }
+    button.secondary { color:#344054; background:#f2f4f7; border:1px solid var(--line); }
+    button.success { background:var(--green); } button:disabled { opacity:.5; cursor:wait; }
+    .hint { margin:7px 0 0; color:var(--muted); font-size:13px; }
+    .checks { display:flex; flex-wrap:wrap; gap:18px; margin-top:12px; }
+    .checks label { display:flex; align-items:center; gap:7px; font-weight:500; } .checks input { width:auto; margin:0; }
+    pre.output { min-height:65px; max-height:380px; overflow:auto; margin:15px 0 0; padding:13px; border-radius:8px; white-space:pre-wrap; word-break:break-word; background:#f8fafc; border:1px solid #e4e7ec; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    pre.error { color:var(--red); background:var(--redbg); border-color:#fecdca; }
+    pre.ok { color:var(--green); background:var(--greenbg); border-color:#abefc6; }
+    pre.warning { color:var(--amber); background:var(--amberbg); border-color:#fedf89; }
+    details { margin-top:15px; border-top:1px solid #eaecf0; padding-top:12px; } summary { cursor:pointer; font-weight:650; }
+    #busy { display:none; position:fixed; inset:0; z-index:10; background:#10182899; place-items:center; color:white; font-size:18px; font-weight:650; }
+    #busy.show { display:grid; } .spinner { width:34px; height:34px; margin:0 auto 12px; border:4px solid #ffffff55; border-top-color:white; border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @media (max-width:850px) { .grid,.grid.three { grid-template-columns:repeat(2,1fr); } .wide { grid-column:1/-1; } header span { display:none; } }
+    @media (max-width:520px) { .grid,.grid.three { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<header><h1>BlastUrban 3-D Case Builder</h1><span>macOS Browser UI · OpenFOAM Docker/Linux · 10 CPU / 64 GB profile</span></header>
+<main>
+  <div class="steps">
+    <section class="card">
+      <h2><b>1</b>นำเข้าและตรวจ STL</h2>
+      <div class="grid">
+        <label class="wide">เลือก STL จาก Mac<input id="stl_file" type="file" accept=".stl,model/stl"></label>
+        <label>Scale<input id="scale" type="number" step="any" value="1"></label>
+        <label class="wide">หรือระบุ path เต็ม<input id="stl_path" type="text"></label>
+        <label>หน่วย<input value="m=1, cm=.01, mm=.001" readonly></label>
+        <label>Buffer รอบอาคาร (m)<input id="horizontal_buffer" type="number" step="any" value="20"></label>
+        <label>Buffer ด้านบน (m)<input id="top_buffer" type="number" step="any" value="20"></label>
+        <label>Target base cell (m)<input id="target_cell" type="number" step="any" value="1.5"></label>
+      </div>
+      <div class="buttons">
+        <button onclick="checkSurface(false)">ตรวจ Surface</button>
+        <button onclick="checkSurface(true)">ตรวจ + Auto Domain/Mesh</button>
+      </div>
+      <p class="hint">ไฟล์จากช่องเลือกจะถูกคัดลอกชั่วคราวเฉพาะระหว่างเปิดโปรแกรม แล้วจึงคัดลอกเข้า case ตอน Export</p>
+      <pre id="surface_output" class="output">รอเลือก STL และตรวจสอบ…</pre>
+    </section>
+
+    <section class="card">
+      <h2><b>2</b>Domain และ Mesh</h2>
+      <div class="grid three">
+        <label>X min (m)<input id="xmin" type="number" step="any" value="-20"></label>
+        <label>Y min (m)<input id="ymin" type="number" step="any" value="-20"></label>
+        <label>Z min / ground (m)<input id="zmin" type="number" step="any" value="0"></label>
+        <label>X max (m)<input id="xmax" type="number" step="any" value="90"></label>
+        <label>Y max (m)<input id="ymax" type="number" step="any" value="95"></label>
+        <label>Z max (m)<input id="zmax" type="number" step="any" value="55"></label>
+        <label>Nx<input id="nx" type="number" value="74"></label>
+        <label>Ny<input id="ny" type="number" value="77"></label>
+        <label>Nz<input id="nz" type="number" value="37"></label>
+        <label>Wall level min<input id="surface_min" type="number" value="2"></label>
+        <label>Wall level max<input id="surface_max" type="number" value="3"></label>
+        <label>Feature level<input id="feature_level" type="number" value="2"></label>
+      </div>
+      <details>
+        <summary>Advanced mesh limits</summary>
+        <div class="grid" style="margin-top:12px">
+          <label>snappy max cells<input id="snappy_cells" type="number" value="6000000"></label>
+          <label>Dynamic max cells<input id="dynamic_cells" type="number" value="8000000"></label>
+          <label>Dynamic levels<input id="dynamic_levels" type="number" value="2"></label>
+          <label>Refine interval<input id="refine_interval" type="number" value="5"></label>
+        </div>
+      </details>
+      <h3>locationInMesh — ต้องอยู่ในอากาศ</h3>
+      <div class="grid three">
+        <label>X<input id="location_x" type="number" step="any" value="-10"></label>
+        <label>Y<input id="location_y" type="number" step="any" value="-10"></label>
+        <label>Z<input id="location_z" type="number" step="any" value="1"></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><b>3</b>ตำแหน่งและมวลระเบิด</h2>
+      <div class="grid three">
+        <label>Charge X (m)<input id="charge_x" type="number" step="any" value="35"></label>
+        <label>Charge Y (m)<input id="charge_y" type="number" step="any" value="20"></label>
+        <label>Charge Z (m)<input id="charge_z" type="number" step="any" value="1"></label>
+        <label>มวล C4 (kg)<input id="mass" type="number" step="any" value="10"></label>
+        <label>Density (kg/m³)<input id="density" type="number" step="any" value="1601"></label>
+        <label>Charge refine level<input id="charge_level" type="number" value="6"></label>
+        <label>Plane X<input id="plane_x" type="number" step="any" value="35"></label>
+        <label>Plane Y<input id="plane_y" type="number" step="any" value="20"></label>
+        <label>Plane Z<input id="plane_z" type="number" step="any" value="1"></label>
+      </div>
+      <div class="buttons">
+        <button class="secondary" onclick="autoCharge()">Auto charge refinement</button>
+        <button class="secondary" onclick="planesAtCharge()">ให้ระนาบผ่านจุดระเบิด</button>
+      </div>
+      <p id="charge_summary" class="hint"></p>
+    </section>
+
+    <section class="card">
+      <h2><b>4</b>Probes เวลา และผลลัพธ์</h2>
+      <div class="grid">
+        <label class="full">Pressure probes — หนึ่งจุดต่อบรรทัด: x y z<textarea id="probes">35 15 1  # south
+40 20 1  # east
+35 25 1  # near wall</textarea></label>
+        <label>End time (s)<input id="end_time" type="number" step="any" value="0.0125"></label>
+        <label>Initial deltaT (s)<input id="delta_t" type="number" step="any" value="5e-8"></label>
+        <label>Max deltaT (s)<input id="max_delta_t" type="number" step="any" value="2.5e-7"></label>
+        <label>Max Courant<input id="max_co" type="number" step="any" value="0.3"></label>
+        <label>Write interval (s)<input id="write_interval" type="number" step="any" value="2.5e-5"></label>
+        <label>MPI ranks<input id="mpi" type="number" value="10"></label>
+        <label>Ambient pressure (Pa)<input id="ambient_pressure" type="number" step="any" value="101298"></label>
+        <label>Pressure iso (Pa)<input id="iso_pressure" type="number" step="any" value="110000"></label>
+      </div>
+      <div class="checks"><label><input id="binary" type="checkbox" checked>เขียน full fields แบบ binary</label></div>
+    </section>
+
+    <section class="card">
+      <h2><b>5</b>ตรวจและ Export สำหรับ Server</h2>
+      <div class="grid">
+        <label>ชื่อ Case<input id="case_name" value="urbanBlast3D"></label>
+        <label class="wide">Output parent folder<input id="output" type="text"></label>
+      </div>
+      <div class="checks">
+        <label><input id="archive" type="checkbox" checked>สร้าง .tar.gz</label>
+        <label><input id="allow_surface_errors" type="checkbox">อนุญาต Export เมื่อ STL มี surface errors</label>
+      </div>
+      <div class="buttons">
+        <button onclick="validateCase()">ตรวจ Config</button>
+        <button class="success" onclick="exportCase()">สร้าง Case + Server Package</button>
+      </div>
+      <pre id="result_output" class="output">ยังไม่ได้ตรวจ Config</pre>
+    </section>
+  </div>
+</main>
+<div id="busy"><div><div class="spinner"></div><span id="busy_text">กำลังทำงาน…</span></div></div>
+<script>
+  const ids = [
+    'stl_path','scale','horizontal_buffer','top_buffer','target_cell',
+    'xmin','ymin','zmin','xmax','ymax','zmax','nx','ny','nz',
+    'surface_min','surface_max','feature_level','snappy_cells','dynamic_cells','dynamic_levels','refine_interval',
+    'location_x','location_y','location_z','charge_x','charge_y','charge_z','mass','density','charge_level',
+    'plane_x','plane_y','plane_z','probes','end_time','delta_t','max_delta_t','max_co','write_interval',
+    'mpi','ambient_pressure','iso_pressure','case_name','output'
+  ];
+  const checks = ['binary','archive','allow_surface_errors'];
+  let uploadedFileKey = '';
+  const el = id => document.getElementById(id);
+  const value = id => el(id).value;
+  function setBusy(on,text='กำลังทำงาน…') { el('busy_text').textContent=text; el('busy').classList.toggle('show',on); document.querySelectorAll('button').forEach(b=>b.disabled=on); }
+  function show(id,text,kind='') { const out=el(id); out.textContent=text; out.className='output '+kind; }
+  function collect() { const data={}; ids.forEach(id=>data[id]=value(id)); checks.forEach(id=>data[id]=el(id).checked); return data; }
+  async function api(path,options={}) { const response=await fetch(path,options); const data=await response.json(); if(!response.ok) throw new Error(data.error||`HTTP ${response.status}`); return data; }
+  async function ensureUpload() {
+    const file=el('stl_file').files[0];
+    if(!file) return;
+    const key=`${file.name}:${file.size}:${file.lastModified}`;
+    if(key===uploadedFileKey && value('stl_path')) return;
+    const safeName=file.name.replace(/[^A-Za-z0-9_.-]+/g,'_');
+    const data=await api('/api/upload',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':safeName},body:file});
+    el('stl_path').value=data.path; uploadedFileKey=key;
+  }
+  async function checkSurface(auto) {
+    setBusy(true,auto?'กำลังตรวจ STL และสร้าง Domain/Mesh…':'กำลังตรวจ STL และเรียก Docker surfaceCheck…');
+    try {
+      await ensureUpload(); const payload=collect(); payload.auto=auto;
+      const data=await api('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const kind=data.errors.length?'error':(data.warnings.length?'warning':'ok'); show('surface_output',data.summary,kind);
+      if(data.auto_values) {
+        const a=data.auto_values;
+        ['xmin','ymin','zmin'].forEach((id,i)=>el(id).value=a.domain_min[i]);
+        ['xmax','ymax','zmax'].forEach((id,i)=>el(id).value=a.domain_max[i]);
+        ['nx','ny','nz'].forEach((id,i)=>el(id).value=a.divisions[i]);
+        el('surface_min').value=a.surface_levels[0]; el('surface_max').value=a.surface_levels[1]; el('feature_level').value=a.feature_level;
+        ['location_x','location_y','location_z'].forEach((id,i)=>el(id).value=a.location[i]);
+      }
+    } catch(error) { show('surface_output','ERROR: '+error.message,'error'); } finally { setBusy(false); }
+  }
+  function autoCharge() {
+    const base=Number(value('target_cell')), mass=Number(value('mass')), rho=Number(value('density'));
+    const radius=Math.cbrt(3*mass/rho/(4*Math.PI)); const target=2*radius/6;
+    el('charge_level').value=Math.max(1,Math.min(10,Math.ceil(Math.log2(Math.max(base/target,1))))); updateCharge();
+  }
+  function planesAtCharge() { ['x','y','z'].forEach(a=>el('plane_'+a).value=value('charge_'+a)); }
+  function updateCharge() {
+    const mass=Number(value('mass')),rho=Number(value('density')),base=Number(value('target_cell')),level=Number(value('charge_level'));
+    if(mass>0&&rho>0&&base>0) { const r=Math.cbrt(3*mass/rho/(4*Math.PI)), c=base/(2**level); el('charge_summary').textContent=`รัศมีทฤษฎี ${r.toPrecision(5)} m · cell รอบ charge ≈ ${c.toPrecision(5)} m · ${(2*r/c).toFixed(1)} cells/diameter`; }
+  }
+  async function validateCase() {
+    setBusy(true,'กำลังตรวจ Config และตำแหน่งกับผิว STL…');
+    try {
+      await ensureUpload(); const data=await api('/api/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
+      let text=data.ok?'CONFIG OK — พร้อมสร้าง case\n':'ERROR\n';
+      data.errors.forEach(x=>text+='  • '+x+'\n'); if(data.warnings.length) { text+='\nWARNING\n'; data.warnings.forEach(x=>text+='  • '+x+'\n'); }
+      text+=`\nBase cells: ${data.base_cells.toLocaleString()}\nActual cell: (${data.actual_cell_size.map(x=>x.toPrecision(5)).join(' ')}) m\nCharge radius: ${data.charge_radius.toPrecision(6)} m\nRAM at cap ≈ ${data.estimate.ram_gib_at_dynamic_cap.toFixed(1)} GiB\nOutput frames ≈ ${Math.floor(data.estimate.frames).toLocaleString()}\nDisk worst-case planning ≈ ${data.estimate.disk_gib_at_dynamic_cap.toFixed(0)} GiB`;
+      show('result_output',text,data.ok?(data.warnings.length?'warning':'ok'):'error'); return data.ok;
+    } catch(error) { show('result_output','ERROR: '+error.message,'error'); return false; } finally { setBusy(false); }
+  }
+  async function exportCase() {
+    setBusy(true,'กำลังตรวจและสร้าง Case + Server package…');
+    try {
+      await ensureUpload(); const data=await api('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
+      let text=`สร้างสำเร็จ\nCase: ${data.target}\n`; if(data.archive) text+=`Archive: ${data.archive}\n`; text+='\nดูคำสั่งใน SERVER_COMMANDS.md';
+      if(data.warnings.length) text+='\n\nWARNING\n'+data.warnings.map(x=>'  • '+x).join('\n'); show('result_output',text,data.warnings.length?'warning':'ok');
+    } catch(error) { show('result_output','EXPORT ERROR: '+error.message,'error'); } finally { setBusy(false); }
+  }
+  fetch('/api/defaults').then(r=>r.json()).then(d=>{el('stl_path').value=d.stl_path;el('output').value=d.output;});
+  ['mass','density','target_cell','charge_level'].forEach(id=>el(id).addEventListener('input',updateCharge)); updateCharge();
+</script>
+</body>
+</html>
