@@ -41,17 +41,20 @@
   <aside class="panel">
     <div class="group computedOnly" id="focusGroup" hidden><label for="focus">มุมมอง</label><select id="focus"><option value="blast">บริเวณระเบิด</option><option value="town">เมืองทั้งหมด</option></select></div>
     <div class="group computedOnly"><label for="field">สีบนพื้นผิวผนัง</label><select id="field"><option value="op">Overpressure ขณะนั้น (kPa)</option><option value="opMax">Peak overpressure (kPa)</option><option value="temp">Air temperature ใกล้ผนัง (K)</option></select></div>
-    <div class="group"><label>Surface with Edges</label><label class="check"><input id="wallEdges" type="checkbox" checked>ขอบผิวอาคาร</label><label class="check"><input id="waveEdges" type="checkbox" checked>ขอบผิวคลื่นระเบิด</label></div>
+    <div class="group"><label for="wallStyle">การแสดงผิวอาคาร</label><select id="wallStyle"><option value="surface">Surface</option><option value="edges" selected>Surface with Edges</option><option value="hidden">ซ่อน</option></select></div>
+    <div class="group"><label for="waveStyle">การแสดงผิวคลื่นระเบิด</label><select id="waveStyle"><option value="surface">Surface</option><option value="edges" selected>Surface with Edges</option><option value="hidden">ซ่อน</option></select></div>
     <div class="group computedOnly"><label for="time">เวลาจำลอง</label><div class="value" id="timeValue"></div><input id="time" type="range" min="0" value="0" step="1"><div class="row"><button id="play">เล่น</button><button id="reset">รีเซ็ตมุม</button></div></div>
     <div class="group computedOnly" id="statsGroup" hidden><label>ค่าสูงสุดจาก patch ผนังทั้งหมด</label><div class="note" id="surfaceStats"></div></div>
     <div class="group computedOnly"><label>ช่วงสีที่แสดง</label><div class="row"><input id="minimum" type="number" step="any" aria-label="minimum"><input id="maximum" type="number" step="any" aria-label="maximum"></div><div class="legend"></div><div class="scale"><span id="minLabel"></span><span id="maxLabel"></span></div></div>
     <div class="group" id="previewReset" hidden><button id="resetPreview">รีเซ็ตมุม</button></div>
-    <p class="note" id="description">เปลือกสีฟ้าคือ isosurface ของความดัน 110 kPa จากผลจำลอง ไม่ใช่ควันจริง สีผนังใช้ค่าของอากาศที่ขอบผนัง อุณหภูมิเนื้อวัสดุผนังต้องใช้แบบจำลองความร้อนในของแข็ง</p>
+    <p class="note" id="description">เปลือกสีฟ้าคือ isosurface ของความดัน (p) ตามค่า iso ที่ตั้งใน controlDict จากผลจำลอง ไม่ใช่ควันจริง สีผนังใช้ค่าของอากาศที่ขอบผนัง อุณหภูมิเนื้อวัสดุผนังต้องใช้แบบจำลองความร้อนในของแข็ง</p>
   </aside>
 </main>
 <script>
 const data = __BLAST_DATA__;
 document.getElementById('modelLabel').textContent = data.model;
+const isoLabel = data.waveIsoKPa != null ? `p = ${data.waveIsoKPa.toLocaleString()} kPa (absolute)` : 'p iso';
+if (data.waveIsoKPa != null) document.getElementById('description').textContent = document.getElementById('description').textContent.replace('ตามค่า iso ที่ตั้งใน controlDict', `ที่ ${data.waveIsoKPa.toLocaleString()} kPa (ความดันสัมบูรณ์ ไม่ใช่ overpressure)`);
 if (data.blastCenter) document.getElementById('focusGroup').hidden = false;
 if (data.frames[0].stats) document.getElementById('statsGroup').hidden = false;
 if (data.preview) {
@@ -63,7 +66,7 @@ const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d', {alpha: false});
 const controls = {
   field: document.getElementById('field'), time: document.getElementById('time'),
-  wallEdges: document.getElementById('wallEdges'), waveEdges: document.getElementById('waveEdges'),
+  wallStyle: document.getElementById('wallStyle'), waveStyle: document.getElementById('waveStyle'),
   min: document.getElementById('minimum'), max: document.getElementById('maximum'),
   timeValue: document.getElementById('timeValue'), minLabel: document.getElementById('minLabel'),
   maxLabel: document.getElementById('maxLabel'), play: document.getElementById('play')
@@ -123,6 +126,8 @@ function drawDomain(width, height) {
   }
 }
 function addTriangles(items, mesh, isWave, field, low, high, width, height) {
+  const style=isWave ? controls.waveStyle.value : controls.wallStyle.value;
+  if (style==='hidden') return;
   const projected = mesh.points.map(p => project(p,width,height));
   for (let i=0; i<mesh.faces.length; i++) {
     const ids=mesh.faces[i], a=projected[ids[0]], b=projected[ids[1]], c=projected[ids[2]];
@@ -157,7 +162,7 @@ function render() {
   for (const t of items) {
     ctx.beginPath(); ctx.moveTo(t.a.x,t.a.y); ctx.lineTo(t.b.x,t.b.y); ctx.lineTo(t.c.x,t.c.y); ctx.closePath();
     ctx.fillStyle=t.fill; ctx.fill();
-    if (t.isWave ? controls.waveEdges.checked : controls.wallEdges.checked) {
+    if ((t.isWave ? controls.waveStyle.value : controls.wallStyle.value)==='edges') {
       ctx.strokeStyle=t.isWave ? 'rgba(175,237,255,0.25)' : 'rgba(6,22,35,0.55)';
       ctx.lineWidth=t.isWave ? 0.5 : 0.7;
       ctx.stroke();
@@ -165,7 +170,7 @@ function render() {
   }
   drawDomain(width,height);
   controls.timeValue.textContent=`${(frame.time*1000).toFixed(2)} ms`;
-  if (frame.stats) document.getElementById('surfaceStats').textContent=`Overpressure ${frame.stats.op.toLocaleString()} kPa · Peak ${frame.stats.opMax.toLocaleString()} kPa · T ${frame.stats.temp.toLocaleString()} K · ผิวคลื่น 110 kPa ไกลสุด ${frame.stats.waveRadius.toLocaleString()} m`;
+  if (frame.stats) document.getElementById('surfaceStats').textContent=`Overpressure ${frame.stats.op.toLocaleString()} kPa · Peak ${frame.stats.opMax.toLocaleString()} kPa · T ${frame.stats.temp.toLocaleString()} K · ผิวคลื่น ${isoLabel} ไกลสุด ${frame.stats.waveRadius.toLocaleString()} m`;
   controls.minLabel.textContent=low; controls.maxLabel.textContent=high;
 }
 function fieldChanged() {
@@ -179,8 +184,8 @@ document.getElementById('focus').addEventListener('change',e=>{
   viewRadius=blast?data.blastRadius:data.radius;
   zoom=1; render();
 });
-controls.wallEdges.addEventListener('change',render);
-controls.waveEdges.addEventListener('change',render);
+controls.wallStyle.addEventListener('change',render);
+controls.waveStyle.addEventListener('change',render);
 controls.time.addEventListener('input',render);
 controls.min.addEventListener('input',render);
 controls.max.addEventListener('input',render);

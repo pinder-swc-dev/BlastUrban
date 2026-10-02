@@ -16,11 +16,15 @@ Commands:
   sync                          Copy source/case inputs to the server (no delete)
   sync-dry-run                  Preview files that sync would transfer
   build                         Build blastFoam on the server
+  git-update                    Pull the current branch on the server (fast-forward only)
   exec -- COMMAND [ARG ...]     Run a command from the remote repository root
   case CASE -- COMMAND [ARG ...]
                                 Run a command from a case directory
   shell                         Open an interactive shell in the remote repo
   fetch REMOTE_PATH LOCAL_DIR   Copy a selected remote file/directory back
+  run-auto CASE                 Submit/run a generated case with safe auto resources
+  job-status CASE               Show the generated case job status
+  fetch-web CASE LOCAL_DIR      Fetch only the compact Web viewer/result summary
 
 Configuration defaults to .remote.env. Override it with REMOTE_DEV_CONFIG.
 See docs/REMOTE_DEVELOPMENT_TH.md for setup and examples.
@@ -107,11 +111,12 @@ shift 3
 [[ -f "$openfoam_bashrc" ]] || { printf 'OpenFOAM bashrc not found: %s\n' "$openfoam_bashrc" >&2; exit 1; }
 [[ -d "$repo/$relative_cwd" ]] || { printf 'Remote working directory not found: %s\n' "$repo/$relative_cwd" >&2; exit 1; }
 
-# OpenFOAM/blastFoam startup files commonly inspect unset variables.
-set +u
+# OpenFOAM/blastFoam startup files inspect unset variables and may contain
+# harmless probe commands that return non-zero.
+set +eu
 source "$openfoam_bashrc"
 source "$repo/etc/bashrc"
-set -u
+set -eu
 cd "$repo/$relative_cwd"
 exec "$@"
 REMOTE_SCRIPT
@@ -144,10 +149,10 @@ printf 'Host: '; hostname
 printf 'Repository: %s\n' "$repo"
 [[ -d "$repo" ]] || { echo 'Repository: MISSING'; exit 1; }
 [[ -f "$openfoam_bashrc" ]] || { printf 'OpenFOAM bashrc: MISSING (%s)\n' "$openfoam_bashrc"; exit 1; }
-set +u
+set +eu
 source "$openfoam_bashrc"
 source "$repo/etc/bashrc"
-set -u
+set -eu
 printf 'WM_PROJECT_VERSION: %s\n' "${WM_PROJECT_VERSION:-unknown}"
 printf 'WM_OPTIONS: %s\n' "${WM_OPTIONS:-unknown}"
 printf 'blastFoam: '
@@ -168,6 +173,13 @@ REMOTE_SCRIPT
         ;;
     build)
         remote_exec . ./Allwmake -j "$REMOTE_BUILD_JOBS"
+        ;;
+    git-update)
+        ssh_script "$REMOTE_DIR" <<'REMOTE_SCRIPT'
+set -Eeuo pipefail
+repo=$1
+git -C "$repo" pull --ff-only
+REMOTE_SCRIPT
         ;;
     exec)
         [[ ${1:-} == -- ]] && shift
@@ -194,6 +206,27 @@ REMOTE_SCRIPT
         mkdir -p -- "$local_dir"
         rsync -az --human-readable --info=progress2 -e "$rsync_shell" \
             "$REMOTE_HOST:$REMOTE_DIR/$remote_path" "$local_dir/"
+        ;;
+    run-auto)
+        case_path=${1:-}
+        [[ -n "$case_path" ]] || die "ระบุ CASE"
+        validate_relative_path "$case_path"
+        remote_exec "$case_path" ./server-run-auto.sh
+        ;;
+    job-status)
+        case_path=${1:-}
+        [[ -n "$case_path" ]] || die "ระบุ CASE"
+        validate_relative_path "$case_path"
+        remote_exec "$case_path" sh -c 'cat server-job-status.json 2>/dev/null || echo "ยังไม่มีสถานะงาน"'
+        ;;
+    fetch-web)
+        case_path=${1:-}
+        local_dir=${2:-}
+        [[ -n "$case_path" && -n "$local_dir" ]] || die "ใช้: remote-dev fetch-web CASE LOCAL_DIR"
+        validate_relative_path "$case_path"
+        mkdir -p -- "$local_dir"
+        rsync -az --human-readable --info=progress2 -e "$rsync_shell" \
+            "$REMOTE_HOST:$REMOTE_DIR/$case_path/results-web/" "$local_dir/"
         ;;
     *)
         usage >&2

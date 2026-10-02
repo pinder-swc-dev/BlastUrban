@@ -1,6 +1,9 @@
-docker/**
-snap/**
-.github/**
-.gitignore
-*.snap
-*.zip
+# Both Dockerfiles build entirely from an existing image or a root-level .deb.
+# Keep the build context small; the 100+ MB source tree is not copied into an
+# image and only slowed every build down.
+**
+!Dockerfile
+!blastfoam_*.deb
+!tools/
+!tools/blast_case_ui/
+!tools/blast_case_ui/Dockerfile.server-web

@@ -112,10 +112,20 @@ doc/Doxygen/DTAGS
 **/*.surfaceStats.csv
 **/*MeshPreview.html
 **/*.gltf
+**/results-web/
+**/*-web-result.tar.gz
+**/*-web-result.tar.gz.sha256
+**/server-job-status.json
+**/server-job-unit.txt
+**/server-job-container.txt
+**/.server-job.lock
+**/.decomposeParDict.*
+**/diagnostics/surfaceCheck/
 *.tar.gz.sha256
 **/__pycache__/
 **/*.pyc
 
 # Generated copies and rendered documentation
 /tutorials/blastFoam/building3DWorkshop/townRun/
+/tutorials/blastFoam/building3DWorkshop/generatedCases/
 /tutorials/blastFoam/docs/openfoam-blastfoam/*.pdf

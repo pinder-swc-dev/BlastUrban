@@ -18,5 +18,5 @@ cp system/blockMeshDict system/controlDict system/decomposeParDict \
 cp constant/dynamicMeshDict constant/phaseProperties "$target/constant/"
 cp constant/triSurface/townBuildings.stl "$target/constant/triSurface/"
 cp 0/*.orig "$target/0/"
-cp Allrun Allclean "$target/"
+cp Allrun Allclean organizeSurfaceCheckOutput.sh "$target/"
 printf 'Prepared %s from the repaired town STL. Run: cd %s && ./Allrun\n' "$target" "$target"

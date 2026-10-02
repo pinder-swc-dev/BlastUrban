@@ -29,6 +29,7 @@ Triangle = Tuple[Vec3, Vec3, Vec3]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TEMPLATE = REPO_ROOT / "tutorials/blastFoam/building3DWorkshop"
+UI_ASSETS = Path(__file__).with_name("assets")
 
 
 def foam_number(value: float) -> str:
@@ -182,7 +183,7 @@ class RepairResult:
     def readable_summary(self) -> str:
         lines = [
             "ผลการซ่อมโมเดล",
-            f"สร้างไฟล์ใหม่: {self.output}",
+            f"ไฟล์ที่กำลังใช้งานหลังซ่อม: {self.output}",
             f"เชื่อมจุดที่อยู่ใกล้กัน: {self.welded_vertices:,} จุด",
             f"ลบหน้าที่เสีย/ซ้ำ: {self.removed_degenerate:,} / {self.removed_duplicate_faces:,}",
             f"พบขอบรูแบบวงปิด: {self.boundary_loops_found:,} วง",
@@ -211,7 +212,17 @@ def _binary_stl_info(path: Path) -> Tuple[bool, int]:
     with path.open("rb") as handle:
         header = handle.read(84)
     triangle_count = struct.unpack("<I", header[80:84])[0]
-    return size == 84 + triangle_count * 50, triangle_count
+    expected_size = 84 + triangle_count * 50
+    # A few CAD exporters append a small metadata/footer block after the
+    # standard binary STL records.  Requiring exact size misclassifies those
+    # files as ASCII and makes a valid model appear empty.  ASCII STL text at
+    # bytes 80..83 almost always decodes to a count far larger than the file.
+    binary_layout = expected_size <= size and (
+        triangle_count > 0
+        or b"\x00" in header
+        or not header.lstrip().lower().startswith(b"solid")
+    )
+    return binary_layout, triangle_count
 
 
 def iter_stl_triangles(path: Path) -> Iterator[Triangle]:
@@ -224,13 +235,16 @@ def iter_stl_triangles(path: Path) -> Iterator[Triangle]:
             for _ in range(triangle_count):
                 data = handle.read(record.size)
                 if len(data) != record.size:
-                    raise ValueError("Binary STL ended before all triangles were read")
+                    raise ValueError("ไฟล์ Binary STL ขาดหายก่อนอ่าน triangles ครบ")
                 values = record.unpack(data)
-                yield (
+                triangle = (
                     (values[3], values[4], values[5]),
                     (values[6], values[7], values[8]),
                     (values[9], values[10], values[11]),
                 )
+                if not all(math.isfinite(value) for point in triangle for value in point):
+                    raise ValueError("Binary STL มีพิกัด NaN หรือ Infinity")
+                yield triangle
         return
 
     vertices: List[Vec3] = []
@@ -239,16 +253,19 @@ def iter_stl_triangles(path: Path) -> Iterator[Triangle]:
             fields = line.strip().split()
             if fields and fields[0].lower() == "vertex":
                 if len(fields) != 4:
-                    raise ValueError(f"Invalid ASCII STL vertex at line {line_number}")
+                    raise ValueError(f"รูปแบบ vertex ใน ASCII STL ไม่ถูกต้องที่บรรทัด {line_number}")
                 try:
-                    vertices.append((float(fields[1]), float(fields[2]), float(fields[3])))
+                    point = (float(fields[1]), float(fields[2]), float(fields[3]))
                 except ValueError as exc:
-                    raise ValueError(f"Invalid number in ASCII STL at line {line_number}") from exc
+                    raise ValueError(f"พิกัดใน ASCII STL ไม่ใช่ตัวเลขที่บรรทัด {line_number}") from exc
+                if not all(math.isfinite(value) for value in point):
+                    raise ValueError(f"ASCII STL มีพิกัด NaN หรือ Infinity ที่บรรทัด {line_number}")
+                vertices.append(point)
                 if len(vertices) == 3:
                     yield (vertices[0], vertices[1], vertices[2])
                     vertices.clear()
     if vertices:
-        raise ValueError("ASCII STL has an incomplete triangle")
+        raise ValueError("ไฟล์ ASCII STL ไม่สมบูรณ์: triangle สุดท้ายมี vertex ไม่ครบ 3 จุด")
 
 
 def _sub(a: Vec3, b: Vec3) -> Vec3:
@@ -1457,9 +1474,13 @@ tar -xzf {config.case_name}.tar.gz
 cd {config.case_name}
 source /opt/openfoam9/etc/bashrc
 source /path/to/BlastUrban/etc/bashrc
-./preflight.sh
-./Allrun
+./server-run-auto.sh
 ```
+
+`server-run-auto.sh` uses Slurm automatically when `sbatch` is available. On a
+standalone Linux server it waits for sufficient free CPU/RAM, reserves resources
+for other users, prevents duplicate runs of this case, and starts `Allrun` with
+low CPU/I/O priority. Edit `server-job.env` to change the limits.
 
 Monitor the calculation:
 
@@ -1473,6 +1494,10 @@ df -h .
 `surfaceCheck` and `checkMesh` must be reviewed before accepting engineering results.
 Connected-part OBJ files, zone VTK, and surface-check logs are grouped by run in
 `diagnostics/surfaceCheck/<run-id>/` instead of being left in the case root.
+After a successful run, `makeWebResults.sh` creates `results-web/blast3D.html`
+and `{config.case_name}-web-result.tar.gz`. The offline viewer can display
+overpressure, peak overpressure, temperature, Surface, Surface with Edges, or
+hide each 3-D surface.
 The RAM/disk figures are conservative planning estimates, not solver guarantees.
 """
 
@@ -1482,7 +1507,9 @@ def _preflight(config: CaseConfig, stl_name: str) -> str:
     return f"""#!/bin/sh
 set -eu
 cd "${{0%/*}}" || exit 1
-for command in surfaceCheck surfaceFeatures blockMesh checkMesh decomposePar snappyHexMesh setRefinedFields blastFoam mpirun; do
+for command in surfaceCheck surfaceFeatures blockMesh checkMesh decomposePar snappyHexMesh \
+               addEmptyPatch setRefinedFields blastFoam blastToVTK calculateImpulse \
+               mpirun; do
     command -v "$command" >/dev/null 2>&1 || {{ echo "ERROR: missing $command" >&2; exit 2; }}
 done
 echo "OpenFOAM: ${{WM_PROJECT_VERSION:-unknown}}"
@@ -1595,6 +1622,35 @@ def create_case(
         organizer = target / "organizeSurfaceCheckOutput.sh"
         shutil.copy2(template / "organizeSurfaceCheckOutput.sh", organizer)
         organizer.chmod(0o755)
+        for script_name in ("server-run-auto.sh", "server-docker-job.sh", "makeWebResults.sh"):
+            script = target / script_name
+            shutil.copy2(UI_ASSETS / script_name, script)
+            script.chmod(0o755)
+        (target / "visualization").mkdir()
+        for visualizer_name in ("exportBlast3D.py", "viewer_template.html"):
+            shutil.copy2(
+                template / "visualization" / visualizer_name,
+                target / "visualization" / visualizer_name,
+            )
+        estimated_memory = max(1, math.ceil(config.estimate()["ram_gib_at_dynamic_cap"]))
+        reserve_cores = max(1, min(2, config.mpi_ranks - 1)) if config.mpi_ranks > 1 else 0
+        (target / "server-job.env").write_text(
+            "# Safe defaults generated for this case. Adjust for the server policy.\n"
+            f"BLAST_JOB_NAME={case_name}\n"
+            "BLAST_JOB_CORES=auto\n"
+            f"BLAST_MAX_CORES={config.mpi_ranks}\n"
+            f"BLAST_MIN_CORES={min(2, config.mpi_ranks)}\n"
+            f"BLAST_RESERVE_CORES={reserve_cores}\n"
+            f"BLAST_MEMORY_GIB={estimated_memory}\n"
+            "BLAST_RESERVE_MEMORY_GIB=8\n"
+            "BLAST_WALLTIME=24:00:00\n"
+            "BLAST_SCHEDULER=auto\n"
+            "BLAST_WAIT_FOR_RESOURCES=1\n"
+            "BLAST_OPENFOAM_BASHRC=/opt/openfoam9/etc/bashrc\n"
+            "BLAST_REPO_BASHRC=\n"
+            "BLAST_SLURM_PARTITION=\n",
+            encoding="utf-8",
+        )
         (target / "SERVER_COMMANDS.md").write_text(_server_readme(config, report), encoding="utf-8")
         manifest = {
             "schema_version": 1,

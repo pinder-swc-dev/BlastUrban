@@ -32,10 +32,14 @@ calculation in ParaView; select the `walls` patch, choose `Surface With Edges`, 
 Use `sh prepareTownRun.sh anotherName` to stage another fresh run; the script
 refuses to replace an existing case directory.
 Switch between blast-area and whole-town camera views, rotate by dragging,
-zoom with the wheel, play time, and switch wall coloring
-between instantaneous overpressure, peak overpressure, and air temperature
-near the wall. `Surface with Edges` is enabled for the building and blast-wave
-surfaces; each can be switched independently. Color ranges are editable.
+zoom with the wheel, play time, and switch wall coloring between instantaneous
+overpressure, peak overpressure, and air temperature near the wall. Building
+and blast-wave surfaces each have `Surface`, `Surface with Edges`, and hidden
+modes. Color ranges are editable.
+
+Cases exported by the Browser UI include `server-run-auto.sh`; after the solver
+finishes it runs `makeWebResults.sh` and places the compact viewer, CSV summary,
+status, and selected logs in `results-web/` automatically.
 
 The town exporter needs Python VTK (`python3-vtk`) and matching
 `postProcessing/surfaces/overpressure_walls.vtk.series`,

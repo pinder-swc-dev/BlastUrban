@@ -11,6 +11,8 @@ C4 charge, adaptive refinement, MPI case และเครื่องมือ
 
 ## เอกสาร
 
+- [สถาปัตยกรรมปัจจุบันและเป้าหมาย](ARCHITECTURE.md)
+- [Project audit และลำดับพัฒนา](docs/PROJECT_AUDIT.md)
 - [สารบัญเอกสาร](docs/README.md)
 - [การติดตั้ง](docs/INSTALLATION_TH.md)
 - [การใช้งาน](docs/USAGE_TH.md)
@@ -27,9 +29,38 @@ C4 charge, adaptive refinement, MPI case และเครื่องมือ
 - มีทั้ง case เต็ม `townRun` และ case ทดสอบที่เล็กกว่า `townDemo`
 - ส่ง source ผ่าน Git และรันงานระยะไกลผ่าน SSH/Docker ได้
 - สร้าง HTML viewer แบบ offline จากผล VTK ได้
+- มี Python Desktop UI สำหรับนำเข้า/ตรวจ STL, สร้าง domain และ mesh,
+  ตั้ง charge/probes/time และ export case สำหรับ server 10 cores
+- Browser UI บน macOS สามารถเชื่อมจุดที่เกือบติดกัน ปิดรูเล็กใน STL,
+  ตรวจซ้ำ และตั้งพื้นที่คำนวณ/ความละเอียดให้อัตโนมัติ โดยไม่แก้ไฟล์ต้นฉบับ
+- เคสที่ Export มี Server runner ซึ่งใช้ Slurm เมื่อมี หรือเลือก Core/RAM ที่ว่าง
+  อย่างสุภาพบน Server เดี่ยว แล้วสร้าง Web 3D viewer ให้อัตโนมัติเมื่อคำนวณเสร็จ
+- Browser UI จัดการ Server ในวง LAN ได้ครบผ่าน SSH key: ตรวจ Docker, ส่งงานด้วย
+  rsync, รัน container แบบจำกัด CPU/RAM ผ่าน systemd, ดูสถานะ/หยุดงาน และดึงผลกลับ
 
 รายละเอียด geometry และค่าของ case อยู่ที่
 [TOWN_SETUP.md](tutorials/blastFoam/building3DWorkshop/TOWN_SETUP.md)
+
+เปิด Browser UI บน macOS (ไม่ต้องติดตั้ง Python package เพิ่ม):
+
+```bash
+python3 tools/blast_case_ui/blast_case_web.py
+```
+
+บน macOS เปิดจาก Finder ได้ง่ายที่สุดด้วย `BlastUrbanUI.command` ที่ root ของ
+โปรเจกต์ Launcher จะเปิด Browser UI และเก็บไฟล์งานไว้ใน
+`~/BlastUrbanWorkspace/{cases,results,temp}` แยกจาก source code โดยอัตโนมัติ
+ไฟล์ `tools/blast_case_ui/Launch_BlastCaseUI.command` เดิมยังใช้งานได้เช่นกัน
+Launcher จะเปิด Browser UI
+เพื่อหลีกเลี่ยง system Tk 8.5 ที่ใช้ไม่ได้บน macOS 26 ส่วน
+`surfaceCheck` จะใช้ Docker image ที่มีอยู่ และ solver หลักยังรันใน Linux
+container หรือ calculation server
+
+บน Linux ที่มี Tk สามารถเปิด Desktop UI ด้วย
+`python3 tools/blast_case_ui/blast_case_ui.py`
+
+ดู workflow และข้อจำกัดที่
+[tools/blast_case_ui/README_TH.md](tools/blast_case_ui/README_TH.md)
 
 ## โครงสร้างสำคัญ
 
@@ -316,6 +347,8 @@ python3 ../visualization/exportTownBlast3D.py --case .
 ```
 
 ผลลัพธ์คือ `blast3D.html` และ `blast3D.surfaceStats.csv` ซึ่งถูก ignore โดย Git
+Viewer เลือก Overpressure, Peak Overpressure, Temperature และรูปแบบ `Surface`,
+`Surface with Edges` หรือซ่อนผิวของอาคาร/คลื่นระเบิดได้
 รายละเอียดเพิ่มเติมอยู่ใน
 [visualization/README.md](tutorials/blastFoam/building3DWorkshop/visualization/README.md)
 

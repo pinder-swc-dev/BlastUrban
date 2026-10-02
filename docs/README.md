@@ -6,6 +6,8 @@
 
 | ต้องการทำอะไร | อ่านเอกสาร |
 | --- | --- |
+| เข้าใจสถาปัตยกรรมปัจจุบันและเป้าหมาย | [Architecture](../ARCHITECTURE.md) |
+| ดูผลตรวจ repository, gap และความเสี่ยง | [Project audit](PROJECT_AUDIT.md) |
 | ติดตั้งบน Ubuntu, WSL2, `.deb` หรือ Docker | [การติดตั้ง](INSTALLATION_TH.md) |
 | เตรียม case, เริ่มคำนวณ, ดูสถานะ และอ่านผล | [การใช้งาน](USAGE_TH.md) |
 | แก้ geometry, case settings, solver หรือ library | [การพัฒนาและแก้ไขโค้ด](DEVELOPMENT_TH.md) |

@@ -1,0 +1,12 @@
+**
+!Allwmake
+!applications/
+!applications/**
+!etc/
+!etc/**
+!src/
+!src/**
+!tools/
+!tools/blast_case_ui/
+!tools/blast_case_ui/assets/
+!tools/blast_case_ui/assets/blasturban-container-entrypoint.sh

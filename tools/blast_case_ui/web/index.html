@@ -5,157 +5,362 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>BlastUrban — เตรียมงานจำลองแรงระเบิด</title>
   <style>
-    :root { color-scheme: light; --ink:#17202a; --muted:#667085; --line:#d0d5dd; --blue:#175cd3; --blue2:#eff8ff; --red:#b42318; --redbg:#fef3f2; --green:#067647; --greenbg:#ecfdf3; --amber:#b54708; --amberbg:#fffaeb; }
-    * { box-sizing:border-box; }
-    body { margin:0; background:#f2f4f7; color:var(--ink); font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    header { position:sticky; top:0; z-index:3; display:flex; justify-content:space-between; align-items:center; padding:15px 24px; color:white; background:#101828; box-shadow:0 2px 8px #0003; }
-    header h1 { margin:0; font-size:21px; } header span { color:#d0d5dd; font-size:13px; }
-    main { max-width:1180px; margin:22px auto 60px; padding:0 18px; }
-    .steps { display:grid; gap:16px; }
-    .card { background:white; border:1px solid #e4e7ec; border-radius:12px; padding:20px; box-shadow:0 1px 3px #10182812; }
-    .card h2 { margin:0 0 15px; font-size:18px; } .card h2 b { display:inline-grid; place-items:center; width:28px; height:28px; margin-right:7px; border-radius:50%; color:white; background:var(--blue); }
-    .grid { display:grid; grid-template-columns:repeat(4,minmax(145px,1fr)); gap:12px 16px; }
-    .grid.three { grid-template-columns:repeat(3,minmax(160px,1fr)); }
-    label { display:block; color:#344054; font-size:13px; font-weight:600; }
-    input, textarea { width:100%; margin-top:5px; padding:9px 10px; border:1px solid var(--line); border-radius:7px; color:var(--ink); background:white; font:14px ui-monospace,SFMono-Regular,Menlo,monospace; }
-    input:focus, textarea:focus { outline:2px solid #84adff; border-color:var(--blue); }
-    textarea { min-height:110px; resize:vertical; }
+    :root { color-scheme:dark; --ink:#d7f5ff; --muted:#7f9bab; --line:#1d4054; --panel:#0b1724ee; --panel2:#0f2030; --cyan:#36d9ff; --cyan2:#102f42; --blue:#1677ff; --red:#ff6b6b; --redbg:#351820; --green:#4ef0a5; --greenbg:#0c3028; --amber:#ffc857; --amberbg:#352a12; }
+    * { box-sizing:border-box; scrollbar-width:thin; scrollbar-color:#28536a #08131f; }
+    html,body { height:100%; }
+    body { margin:0; overflow:hidden; color:var(--ink); background-color:#050b12; background-image:linear-gradient(#12304422 1px,transparent 1px),linear-gradient(90deg,#12304422 1px,transparent 1px),radial-gradient(circle at 78% -10%,#0c6d9140,transparent 34%); background-size:28px 28px,28px 28px,auto; font:14px/1.42 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    header { height:64px; display:flex; justify-content:space-between; align-items:center; padding:9px 20px; border-bottom:1px solid #1f5268; background:#07121deF; box-shadow:0 0 30px #00b8e51a; }
+    .brand { display:flex; align-items:center; gap:11px; }
+    .brand-mark { display:grid; place-items:center; width:40px; height:40px; border:1px solid var(--cyan); color:var(--cyan); background:#0b2938; font:800 13px ui-monospace,monospace; clip-path:polygon(12% 0,100% 0,100% 78%,80% 100%,0 100%,0 20%); }
+    header h1 { margin:0; letter-spacing:.14em; color:#f1fbff; font-size:17px; }
+    header p { margin:2px 0 0; color:var(--muted); font:10px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
+    .telemetry { display:flex; align-items:center; gap:14px; color:#91adbc; font:11px ui-monospace,monospace; letter-spacing:.06em; }
+    .telemetry i { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 12px var(--green); }
+    main { height:calc(100dvh - 64px); display:grid; grid-template-columns:210px minmax(0,1fr); gap:12px; padding:12px; }
+    .tabs { min-height:0; display:flex; flex-direction:column; gap:7px; padding:10px; border:1px solid #16394c; border-radius:12px; background:#07131fee; box-shadow:inset 0 1px #ffffff08,0 12px 40px #0006; }
+    .tabs::before { content:'WORKFLOW'; padding:5px 8px 9px; color:#56798d; font:10px ui-monospace,monospace; letter-spacing:.18em; }
+    .tabs button { display:grid; gap:3px; width:100%; padding:13px 12px; text-align:left; color:#7695a7; background:transparent; border:1px solid transparent; border-radius:8px; }
+    .tabs button .tab-kicker { color:#456a7f; font:9px ui-monospace,monospace; letter-spacing:.16em; }
+    .tabs button strong { font-size:13px; }
+    .tabs button.active { color:#eafaff; border-color:#20708f; background:linear-gradient(135deg,#103b50,#0b2637); box-shadow:inset 3px 0 var(--cyan),0 0 18px #00c8ff12; }
+    .tabs button.active .tab-kicker { color:var(--cyan); }
+    .tab-panel { display:none; min-width:0; min-height:0; overflow:hidden; }
+    .tab-panel.active { display:block; height:100%; }
+    .steps { display:grid; height:100%; min-height:0; gap:12px; overflow:hidden; }
+    #tab-setup .steps { grid-template-columns:minmax(340px,.72fr) minmax(520px,1.28fr); grid-template-rows:repeat(3,minmax(0,1fr)); }
+    #tab-setup .card:nth-child(2) { grid-column:2; grid-row:1/4; }
+    #tab-setup .card:not(:nth-child(2)) .grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    #tab-setup .card:not(:nth-child(2)) .wide { grid-column:1/-1; }
+    #tab-server .steps { grid-template-columns:repeat(3,minmax(285px,1fr)); }
+    #tab-server .grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    #tab-server .wide,#tab-server .full { grid-column:1/-1; }
+    #tab-review .steps,#tab-results .steps { grid-template-columns:1fr; }
+    .card { min-height:0; overflow:auto; padding:14px; border:1px solid #173b4e; border-radius:12px; background:linear-gradient(145deg,var(--panel),#08131fed); box-shadow:inset 0 1px #ffffff08,0 10px 35px #0005; }
+    .card h2 { margin:0 0 12px; color:#e8f9ff; font-size:15px; letter-spacing:.02em; } .card h2 b { display:inline-grid; place-items:center; width:24px; height:24px; margin-right:7px; border:1px solid #2883a3; border-radius:6px; color:var(--cyan); background:#0c2c3d; font:700 11px ui-monospace,monospace; }
+    .grid { display:grid; grid-template-columns:repeat(4,minmax(120px,1fr)); gap:9px 11px; }
+    .grid.three { grid-template-columns:repeat(3,minmax(130px,1fr)); }
+    label { display:block; color:#91abba; font-size:11px; font-weight:650; letter-spacing:.02em; }
+    input,textarea,select { width:100%; margin-top:4px; padding:8px 9px; border:1px solid var(--line); border-radius:6px; color:#dff8ff; background:#07121e; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    input[readonly] { color:#8bb8ca; background:#091723; }
+    input:focus,textarea:focus,select:focus { outline:1px solid var(--cyan); border-color:var(--cyan); box-shadow:0 0 0 3px #36d9ff18; }
+    textarea { min-height:84px; resize:vertical; }
     .wide { grid-column:span 3; } .full { grid-column:1/-1; }
-    .buttons { display:flex; flex-wrap:wrap; gap:9px; margin-top:15px; }
-    button { border:0; border-radius:8px; padding:10px 15px; color:white; background:var(--blue); font-weight:650; cursor:pointer; }
-    button.secondary { color:#344054; background:#f2f4f7; border:1px solid var(--line); }
-    button.success { background:var(--green); } button:disabled { opacity:.5; cursor:wait; }
-    .hint { margin:7px 0 0; color:var(--muted); font-size:13px; }
-    .checks { display:flex; flex-wrap:wrap; gap:18px; margin-top:12px; }
-    .checks label { display:flex; align-items:center; gap:7px; font-weight:500; } .checks input { width:auto; margin:0; }
-    pre.output { min-height:65px; max-height:380px; overflow:auto; margin:15px 0 0; padding:13px; border-radius:8px; white-space:pre-wrap; word-break:break-word; background:#f8fafc; border:1px solid #e4e7ec; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
-    pre.error { color:var(--red); background:var(--redbg); border-color:#fecdca; }
-    pre.ok { color:var(--green); background:var(--greenbg); border-color:#abefc6; }
-    pre.warning { color:var(--amber); background:var(--amberbg); border-color:#fedf89; }
-    details { margin-top:15px; border-top:1px solid #eaecf0; padding-top:12px; } summary { cursor:pointer; font-weight:650; }
-    #busy { display:none; position:fixed; inset:0; z-index:10; background:#10182899; place-items:center; color:white; font-size:18px; font-weight:650; }
-    #busy.show { display:grid; } .spinner { width:34px; height:34px; margin:0 auto 12px; border:4px solid #ffffff55; border-top-color:white; border-radius:50%; animation:spin .8s linear infinite; }
+    .field-action { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+    .field-action button { margin-bottom:0; white-space:nowrap; }
+    .required-badge { margin-left:6px; padding:2px 5px; border:1px solid #8a671d; border-radius:4px; color:var(--amber); font:8px ui-monospace,monospace; letter-spacing:.08em; }
+    .buttons { display:flex; flex-wrap:wrap; gap:7px; margin-top:11px; }
+    button { border:1px solid #237c9c; border-radius:6px; padding:8px 11px; color:#eafaff; background:linear-gradient(180deg,#126b8b,#0c4f6b); font-size:12px; font-weight:700; cursor:pointer; box-shadow:0 0 12px #00c8ff12; }
+    button:hover { border-color:var(--cyan); filter:brightness(1.12); }
+    button.secondary { color:#a9c9d6; background:#0b1b29; border-color:#29495b; box-shadow:none; }
+    button.success { color:#031b13; border-color:#4ef0a5; background:linear-gradient(180deg,#4ef0a5,#24b97a); } button:disabled { opacity:.42; cursor:wait; filter:none; }
+    .hint { margin:6px 0 0; color:var(--muted); font-size:11px; }
+    .active-model { margin:9px 0 0; padding:7px 9px; border:1px solid #245b74; border-radius:6px; color:#8de8ff; background:#0b2534; font-size:11px; font-weight:650; }
+    .active-model.repaired { color:var(--green); background:var(--greenbg); border-color:#237b5a; }
+    .checks { display:flex; flex-wrap:wrap; gap:12px; margin-top:9px; }
+    .checks label { display:flex; align-items:center; gap:6px; font-weight:500; } .checks input { width:auto; margin:0; accent-color:var(--cyan); }
+    pre.output { min-height:54px; max-height:145px; overflow:auto; margin:10px 0 0; padding:10px; border:1px solid #17384b; border-radius:6px; color:#9fc0ce; white-space:pre-wrap; word-break:break-word; background:#050d16; font:10.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    pre.error { color:#ffaaa5; background:var(--redbg); border-color:#77333b; }
+    pre.ok { color:#89f5bf; background:var(--greenbg); border-color:#246d52; }
+    pre.warning { color:#ffdb8a; background:var(--amberbg); border-color:#73591e; }
+    details { margin-top:10px; border-top:1px solid #173447; padding-top:9px; } summary { color:#91adbc; cursor:pointer; font-size:11px; font-weight:700; }
+    details.settings { border:1px solid #17384b; border-radius:7px; padding:0; overflow:hidden; background:#081723; }
+    details.settings > summary { padding:9px 11px; list-style:none; color:#8bb1c2; }
+    details.settings > summary::-webkit-details-marker { display:none; }
+    details.settings > summary::after { content:'＋'; float:right; color:var(--cyan); }
+    details.settings[open] > summary::after { content:'－'; }
+    details.settings > .settings-body { padding:11px; border-top:1px solid #17384b; background:#08131f; }
+    .preview-layout { display:grid; height:min(48vh,520px); grid-template-columns:minmax(0,3fr) minmax(205px,1fr); gap:12px; }
+    .preview-wrap { position:relative; min-height:250px; overflow:hidden; border:1px solid #245f79; border-radius:9px; background:radial-gradient(circle at 50% 45%,#123751,#07101b 72%); box-shadow:inset 0 0 35px #0008; }
+    #model_preview { display:block; width:100%; height:100%; min-height:250px; cursor:grab; touch-action:none; }
+    #model_preview.dragging { cursor:grabbing; }
+    .preview-help { position:absolute; left:9px; bottom:8px; padding:4px 7px; border:1px solid #25566d; border-radius:5px; color:#7998a8; background:#06111be8; font-size:9px; pointer-events:none; }
+    .preview-side { display:flex; min-height:0; flex-direction:column; gap:8px; overflow:auto; }
+    .preview-side select { font-family:inherit; }
+    .preview-stats { padding:9px; border:1px solid #19536c; border-radius:7px; background:var(--cyan2); color:#8de8ff; font:10px/1.45 ui-monospace,monospace; white-space:pre-line; }
+    .legend { display:grid; grid-template-columns:repeat(2,1fr); gap:5px; color:#718e9d; font-size:10px; }
+    .legend i { display:inline-block; width:9px; height:9px; margin-right:5px; border-radius:2px; vertical-align:-1px; }
+    .mini-buttons { display:grid; grid-template-columns:repeat(2,1fr); gap:5px; }
+    .mini-buttons button { padding:6px; }
+    .status-strip { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 0; }
+    .status-strip span { padding:5px 7px; border:1px solid #1b465b; border-radius:5px; color:#96bbc9; background:#0a1b28; font-size:10px; font-weight:650; }
+    .connection-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+    .connection-state { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border:1px solid #254657; border-radius:4px; color:#7693a3; background:#091824; font:9px ui-monospace,monospace; font-weight:700; }
+    .connection-state::before { content:''; width:6px; height:6px; border-radius:50%; background:#537080; }
+    .connection-state.ok { color:var(--green); background:var(--greenbg); border-color:#246c51; }.connection-state.ok::before{background:var(--green);box-shadow:0 0 8px var(--green)}
+    .connection-state.warning { color:var(--amber); background:var(--amberbg); border-color:#69521d; }.connection-state.warning::before{background:var(--amber)}
+    .connection-state.error { color:var(--red); background:var(--redbg); border-color:#70313a; }.connection-state.error::before{background:var(--red)}
+    .connection-path { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:5px; margin:0 0 10px; color:#668393; font:9px ui-monospace,monospace; }
+    .connection-path span { padding:5px 7px; border:1px solid #214659; border-radius:4px; background:#081824; }.connection-path i{color:var(--cyan);font-style:normal}
+    .server-summary { margin-top:9px; padding:9px; border:1px solid #17384b; border-radius:6px; color:#8eafbe; background:#06111b; white-space:pre-line; font:10px/1.5 ui-monospace,monospace; }
+    .case-library { margin-top:10px; padding:10px; border:1px solid #1b4a60; border-radius:7px; background:#081a27; }
+    .case-library-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px; color:#94b6c5; font-size:11px; }
+    .case-library-list { display:grid; gap:5px; max-height:160px; overflow:auto; }
+    .case-row { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:7px 8px; border:1px solid #173d50; border-radius:5px; background:#07131f; color:#a7c5d2; font:10px ui-monospace,monospace; }
+    .case-row small { color:#56798b; }.case-row button{padding:5px 8px;font-size:10px}
+    .result-viewer { width:100%; height:calc(100% - 205px); min-height:260px; margin-top:10px; border:1px solid #245f79; border-radius:8px; background:#050b12; }
+    .danger { color:#ffe4e2; background:#6e2630; border-color:#a43c49; }
+    .toast-stack { position:fixed; z-index:30; top:74px; right:14px; width:min(370px,calc(100vw - 28px)); display:grid; gap:8px; pointer-events:none; }
+    .toast { display:grid; grid-template-columns:auto 1fr auto; align-items:start; gap:9px; padding:11px; border:1px solid #246d52; border-radius:7px; color:#99f7c5; background:#0b2a23f5; box-shadow:0 12px 35px #0008; pointer-events:auto; animation:toast-in .2s ease-out; }
+    .toast.warning{color:#ffe09a;background:#32280ff5;border-color:#765c20}.toast.error{color:#ffb1ac;background:#37171df5;border-color:#7b323b}.toast .toast-icon{font-weight:800}.toast .toast-text{white-space:pre-line;overflow-wrap:anywhere}.toast .toast-close{padding:0 3px;color:inherit;background:transparent;border:0;font-size:18px;line-height:1}.toast.leaving{opacity:0;transform:translateX(20px);transition:.18s ease}
+    @keyframes toast-in { from { opacity:0; transform:translateX(25px); } }
+    #busy { display:none; position:fixed; inset:0; z-index:40; background:#02070dcc; backdrop-filter:blur(4px); place-items:center; color:#dffaff; font:14px ui-monospace,monospace; font-weight:650; }
+    #busy.show { display:grid; } .spinner { width:32px; height:32px; margin:0 auto 12px; border:3px solid #36d9ff30; border-top-color:var(--cyan); border-radius:50%; animation:spin .8s linear infinite; box-shadow:0 0 20px #36d9ff40; }
     @keyframes spin { to { transform:rotate(360deg); } }
-    @media (max-width:850px) { .grid,.grid.three { grid-template-columns:repeat(2,1fr); } .wide { grid-column:1/-1; } header span { display:none; } }
-    @media (max-width:520px) { .grid,.grid.three { grid-template-columns:1fr; } }
+    @media (max-width:1180px) { main{grid-template-columns:160px minmax(0,1fr)} #tab-server .steps{grid-template-columns:repeat(2,minmax(280px,1fr));overflow:auto} #tab-server .card:last-child{grid-column:1/-1} #tab-server .steps{grid-auto-rows:max-content;align-content:start} #tab-server .card{overflow:visible} #tab-server .card:last-child>.buttons{position:sticky;bottom:0;z-index:3;margin-inline:-14px;padding:9px 14px;border-top:1px solid #1d4054;background:#09151fee} #tab-setup .steps{grid-template-columns:minmax(300px,.8fr) minmax(440px,1.2fr)} .grid{grid-template-columns:repeat(2,1fr)} .wide{grid-column:1/-1} }
+    @media (max-width:820px) { body{overflow:auto} header{height:58px}.telemetry{display:none} main{display:block;height:auto;padding:8px}.tabs{position:sticky;top:0;z-index:10;display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:8px}.tabs::before,.tab-kicker{display:none}.tabs button{text-align:center;padding:9px 5px}.tab-panel.active{height:auto}.steps,#tab-setup .steps,#tab-server .steps{display:grid;height:auto;grid-template-columns:1fr;grid-template-rows:auto;overflow:visible}#tab-setup .card:nth-child(2),#tab-server .card:last-child{grid-column:auto;grid-row:auto}.card{overflow:visible;margin-bottom:8px}.preview-layout{height:auto;grid-template-columns:1fr}.preview-wrap,#model_preview{height:360px}.result-viewer{height:520px}.grid,.grid.three{grid-template-columns:repeat(2,1fr)} }
+    @media (max-width:520px) { header{padding:8px 12px}.brand-mark{width:34px;height:34px}.brand h1{font-size:14px}.tabs button strong{font-size:10px}.grid,.grid.three{grid-template-columns:1fr}.wide{grid-column:auto}.field-action{grid-template-columns:1fr}.preview-wrap,#model_preview{height:300px} }
   </style>
 </head>
 <body>
-<header><h1>BlastUrban — เตรียมงานจำลองแรงระเบิด</h1><span>ทำงานบน Mac · ส่งไปคำนวณบน Server 10 CPU / RAM 64 GB</span></header>
+<header>
+  <div class="brand"><span class="brand-mark">BU</span><div><h1>BLASTURBAN</h1><p>Engineering simulation control plane</p></div></div>
+  <div class="telemetry"><i></i><span>LOCAL UI · 127.0.0.1</span><span>OPENFOAM 9 / BLASTFOAM</span></div>
+</header>
 <main>
-  <div class="steps">
+  <nav class="tabs" aria-label="ขั้นตอนทำงาน">
+    <button class="active" data-tab-button="setup" onclick="showTab('setup')"><span class="tab-kicker">01 / INPUT</span><strong>โมเดลและค่า</strong></button>
+    <button data-tab-button="review" onclick="showTab('review')"><span class="tab-kicker">02 / CASES</span><strong>สร้างหลาย Case</strong></button>
+    <button data-tab-button="server" onclick="showTab('server')"><span class="tab-kicker">03 / EXECUTE</span><strong>ส่ง Server</strong></button>
+    <button data-tab-button="results" onclick="showTab('results')"><span class="tab-kicker">04 / DATA</span><strong>ผลลัพธ์</strong></button>
+  </nav>
+  <div id="tab-setup" class="tab-panel active"><div class="steps">
     <section class="card">
-      <h2><b>1</b>เลือกโมเดล — ระบบช่วยตรวจและซ่อมให้</h2>
+      <h2><b>1</b>เลือกโมเดล</h2>
       <div class="grid">
-        <label class="wide">เลือก STL จาก Mac<input id="stl_file" type="file" accept=".stl,model/stl"></label>
-        <label>ตัวคูณขนาด<input id="scale" type="number" step="any" value="1"></label>
-        <label class="wide">หรือระบุ path เต็ม<input id="stl_path" type="text"></label>
-        <label>หน่วย<input value="m=1, cm=.01, mm=.001" readonly></label>
-        <label>เว้นที่รอบอาคาร (m)<input id="horizontal_buffer" type="number" step="any" value="20"></label>
-        <label>เว้นที่เหนืออาคาร (m)<input id="top_buffer" type="number" step="any" value="20"></label>
-        <label>ขนาดช่องพื้นฐาน (m)<input id="target_cell" type="number" step="any" value="1.5"></label>
-        <label>เชื่อมจุดที่ห่างไม่เกิน (m)<input id="weld_tolerance" type="number" step="any" value="0.001"></label>
-        <label>ปิดรูที่กว้างไม่เกิน (m)<input id="max_hole_size" type="number" step="any" value="2"></label>
+        <label class="wide">ไฟล์อาคาร STL<input id="stl_file" type="file" accept=".stl,model/stl"></label>
+        <label>Scale / หน่วยของไฟล์<input id="scale" type="number" step="any" value="1" list="scale_units"><datalist id="scale_units"><option value="1">เมตร</option><option value="0.01">เซนติเมตร</option><option value="0.001">มิลลิเมตร</option></datalist></label>
       </div>
+      <p id="active_model" class="active-model">โมเดลที่กำลังใช้: ยังไม่ได้เลือกไฟล์</p>
       <div class="buttons">
-        <button class="success" onclick="repairAndAuto()">✨ ซ่อมและตั้งค่าทั้งหมดให้ฉัน</button>
-        <button class="secondary" onclick="checkSurface(false)">ตรวจโมเดลอย่างเดียว</button>
-        <button class="secondary" onclick="checkSurface(true)">จัดพื้นที่และความละเอียดใหม่</button>
+        <button class="success" onclick="repairAndAuto()">✨ ตรวจ ซ่อม และตั้งค่า Auto</button>
+        <button class="secondary" onclick="checkSurface(false)">ตรวจอย่างเดียว</button>
       </div>
-      <p class="hint">ระบบจะสร้างไฟล์ที่ซ่อมแล้วเป็นไฟล์ใหม่เสมอ ไฟล์ต้นฉบับจะไม่ถูกแก้ไข · ค่า 0.001 m เหมาะกับรอยต่อเล็กประมาณ 1 mm</p>
-      <pre id="surface_output" class="output">รอเลือก STL และตรวจสอบ…</pre>
-      <details><summary>ดูรายละเอียดสำหรับผู้เชี่ยวชาญ</summary><pre id="technical_output" class="output">ยังไม่มีข้อมูล</pre></details>
-    </section>
-
-    <section class="card">
-      <h2><b>2</b>พื้นที่คำนวณและความละเอียด</h2>
-      <div class="grid three">
-        <label>ขอบซ้าย X (m)<input id="xmin" type="number" step="any" value="-20"></label>
-        <label>ขอบหน้า Y (m)<input id="ymin" type="number" step="any" value="-20"></label>
-        <label>ระดับพื้น Z (m)<input id="zmin" type="number" step="any" value="0"></label>
-        <label>ขอบขวา X (m)<input id="xmax" type="number" step="any" value="90"></label>
-        <label>ขอบหลัง Y (m)<input id="ymax" type="number" step="any" value="95"></label>
-        <label>ความสูงบนสุด Z (m)<input id="zmax" type="number" step="any" value="55"></label>
-        <label>จำนวนช่องแนว X<input id="nx" type="number" value="74"></label>
-        <label>จำนวนช่องแนว Y<input id="ny" type="number" value="77"></label>
-        <label>จำนวนช่องแนว Z<input id="nz" type="number" value="37"></label>
-        <label>ละเอียดใกล้อาคาร — เริ่ม<input id="surface_min" type="number" value="2"></label>
-        <label>ละเอียดใกล้อาคาร — สูงสุด<input id="surface_max" type="number" value="3"></label>
-        <label>เก็บความคมของมุม<input id="feature_level" type="number" value="2"></label>
-      </div>
-      <details>
-        <summary>ค่าขั้นสูง — ปกติไม่ต้องแก้</summary>
-        <div class="grid" style="margin-top:12px">
-          <label>จำนวนช่องสูงสุดตอนสร้างอาคาร<input id="snappy_cells" type="number" value="6000000"></label>
-          <label>จำนวนช่องสูงสุดตอนคำนวณ<input id="dynamic_cells" type="number" value="8000000"></label>
-          <label>เพิ่มความละเอียดระหว่างคำนวณ<input id="dynamic_levels" type="number" value="2"></label>
-          <label>ตรวจเพิ่มความละเอียดทุกกี่รอบ<input id="refine_interval" type="number" value="5"></label>
+      <p class="hint">ระบบจะตรวจรอยขาด ซ่อมรูเล็ก ตั้ง Domain และ Mesh ให้ก่อน โดยไม่แก้ไฟล์ต้นฉบับ</p>
+      <pre id="surface_output" class="output">เลือกไฟล์ แล้วกด “ตรวจ ซ่อม และตั้งค่า Auto”</pre>
+      <details class="settings"><summary>ตัวเลือกไฟล์และการซ่อมเพิ่มเติม</summary><div class="settings-body">
+        <div class="grid">
+          <label class="wide">หรือระบุ path เต็ม<input id="stl_path" type="text"></label>
+          <label>พื้นที่ว่างรอบอาคาร (m)<input id="horizontal_buffer" type="number" step="any" value="20"></label>
+          <label>พื้นที่ว่างด้านบน (m)<input id="top_buffer" type="number" step="any" value="20"></label>
+          <label>ขนาดช่องพื้นฐาน (m)<input id="target_cell" type="number" step="any" value="1.5"></label>
+          <label>เชื่อมรอยห่างไม่เกิน (m)<input id="weld_tolerance" type="number" step="any" value="0.001"></label>
+          <label>ปิดรูไม่เกิน (m)<input id="max_hole_size" type="number" step="any" value="2"></label>
         </div>
-      </details>
-      <h3>จุดอากาศอ้างอิง — ระบบเลือกให้อัตโนมัติ อย่าวางไว้ในอาคาร</h3>
-      <div class="grid three">
-        <label>X<input id="location_x" type="number" step="any" value="-10"></label>
-        <label>Y<input id="location_y" type="number" step="any" value="-10"></label>
-        <label>Z<input id="location_z" type="number" step="any" value="1"></label>
-      </div>
+        <div class="buttons"><button class="secondary" onclick="checkSurface(true)">จัด Domain และ Mesh ใหม่</button></div>
+      </div></details>
+      <details><summary>ผลตรวจเชิงเทคนิค</summary><pre id="technical_output" class="output">ยังไม่มีข้อมูล</pre></details>
     </section>
 
     <section class="card">
-      <h2><b>3</b>ตั้งค่าระเบิด</h2>
-      <div class="grid three">
+      <h2><b>2</b>ดูโมเดลและตำแหน่ง Source</h2>
+      <div class="preview-layout">
+        <div class="preview-wrap">
+          <canvas id="model_preview" aria-label="ตัวอย่างโมเดลสามมิติ"></canvas>
+          <div class="preview-help">ลากเพื่อหมุน · เลื่อนล้อเพื่อซูม · Source สีส้มเป็นขนาดคำนวณคร่าว ๆ</div>
+        </div>
+        <aside class="preview-side">
+          <label>รูปแบบโมเดล<select id="preview_style"><option value="surface-edges">ผิวพร้อมเส้นขอบ</option><option value="surface">ผิวทึบ</option><option value="edges">เส้นขอบ</option></select></label>
+          <div class="mini-buttons">
+            <button class="secondary" onclick="setPreviewView('iso')">3D</button>
+            <button class="secondary" onclick="setPreviewView('xy')">มองบน XY</button>
+            <button class="secondary" onclick="setPreviewView('xz')">มองหน้า XZ</button>
+            <button class="secondary" onclick="setPreviewView('yz')">มองข้าง YZ</button>
+          </div>
+          <button class="secondary" onclick="fitPreview()">จัดภาพให้อยู่ตรงกลาง</button>
+          <div class="checks">
+            <label><input id="show_grid" type="checkbox" checked>กริด XYZ</label>
+            <label><input id="show_domain" type="checkbox" checked>ขอบ Domain</label>
+            <label><input id="show_source" type="checkbox" checked>Source</label>
+            <label><input id="show_probes" type="checkbox" checked>จุดวัด</label>
+          </div>
+          <div id="preview_stats" class="preview-stats">กำลังเตรียม Preview…</div>
+          <div class="legend"><span><i style="background:#f79009"></i>Source</span><span><i style="background:#53b1fd"></i>อาคาร</span><span><i style="background:#98a2b3"></i>Domain / Grid</span><span><i style="background:#f97066"></i>จุดวัด</span></div>
+        </aside>
+      </div>
+
+      <details class="settings"><summary>แก้ Domain และ Mesh ด้วยตัวเอง</summary><div class="settings-body">
+        <div class="grid three">
+          <label>ขอบซ้าย X (m)<input id="xmin" type="number" step="any" value="-20"></label>
+          <label>ขอบหน้า Y (m)<input id="ymin" type="number" step="any" value="-20"></label>
+          <label>ระดับพื้น Z (m)<input id="zmin" type="number" step="any" value="0"></label>
+          <label>ขอบขวา X (m)<input id="xmax" type="number" step="any" value="90"></label>
+          <label>ขอบหลัง Y (m)<input id="ymax" type="number" step="any" value="95"></label>
+          <label>ขอบบน Z (m)<input id="zmax" type="number" step="any" value="55"></label>
+          <label>ช่องแนว X<input id="nx" type="number" value="74"></label>
+          <label>ช่องแนว Y<input id="ny" type="number" value="77"></label>
+          <label>ช่องแนว Z<input id="nz" type="number" value="37"></label>
+          <label>ผิวละเอียดเริ่มต้น<input id="surface_min" type="number" value="2"></label>
+          <label>ผิวละเอียดสูงสุด<input id="surface_max" type="number" value="3"></label>
+          <label>ความคมของมุม<input id="feature_level" type="number" value="2"></label>
+        </div>
+        <details><summary>ค่าขั้นสูงของ Mesh</summary><div class="grid" style="margin-top:12px">
+          <label>ช่องสูงสุดตอนสร้างอาคาร<input id="snappy_cells" type="number" value="6000000"></label>
+          <label>ช่องสูงสุดตอนคำนวณ<input id="dynamic_cells" type="number" value="8000000"></label>
+          <label>Refine เพิ่มระหว่างคำนวณ<input id="dynamic_levels" type="number" value="2"></label>
+          <label>ตรวจ Refine ทุกกี่รอบ<input id="refine_interval" type="number" value="5"></label>
+          <label>จุดอากาศ X<input id="location_x" type="number" step="any" value="-10"></label>
+          <label>จุดอากาศ Y<input id="location_y" type="number" step="any" value="-10"></label>
+          <label>จุดอากาศ Z<input id="location_z" type="number" step="any" value="1"></label>
+        </div></details>
+      </div></details>
+    </section>
+
+    <section class="card">
+      <h2><b>3</b>วาง Source ระเบิด</h2>
+      <div class="grid">
         <label>ตำแหน่ง X (m)<input id="charge_x" type="number" step="any" value="35"></label>
         <label>ตำแหน่ง Y (m)<input id="charge_y" type="number" step="any" value="20"></label>
         <label>ความสูง Z (m)<input id="charge_z" type="number" step="any" value="1"></label>
         <label>มวล C4 (kg)<input id="mass" type="number" step="any" value="10"></label>
-        <label>ความหนาแน่น C4 (kg/m³)<input id="density" type="number" step="any" value="1601"></label>
-        <label>ความละเอียดรอบระเบิด<input id="charge_level" type="number" value="6"></label>
-        <label>ระนาบดูผล X<input id="plane_x" type="number" step="any" value="35"></label>
-        <label>ระนาบดูผล Y<input id="plane_y" type="number" step="any" value="20"></label>
-        <label>ระนาบดูผล Z<input id="plane_z" type="number" step="any" value="1"></label>
       </div>
-      <div class="buttons">
-        <button class="secondary" onclick="autoCharge()">เลือกความละเอียดรอบระเบิดให้</button>
-        <button class="secondary" onclick="planesAtCharge()">วางระนาบดูผลตรงจุดระเบิด</button>
-      </div>
+      <div class="status-strip"><span id="source_position_summary">ตำแหน่ง Source</span><span id="source_size_summary">ขนาด Source</span><span id="source_domain_status">กำลังตรวจตำแหน่ง</span></div>
+      <div class="buttons"><button onclick="checkSourcePosition()">ตรวจ Source กับผิวอาคาร</button></div>
       <p id="charge_summary" class="hint"></p>
+      <details class="settings"><summary>ความละเอียด Source และระนาบดูผล</summary><div class="settings-body">
+        <div class="grid">
+          <label>ความหนาแน่น C4 (kg/m³)<input id="density" type="number" step="any" value="1601"></label>
+          <label>ความละเอียดรอบ Source<input id="charge_level" type="number" value="6"></label>
+          <label>ระนาบ X<input id="plane_x" type="number" step="any" value="35"></label>
+          <label>ระนาบ Y<input id="plane_y" type="number" step="any" value="20"></label>
+          <label>ระนาบ Z<input id="plane_z" type="number" step="any" value="1"></label>
+        </div>
+        <div class="buttons"><button class="secondary" onclick="autoCharge()">เลือกความละเอียดให้อัตโนมัติ</button><button class="secondary" onclick="planesAtCharge()">วางระนาบตรง Source</button></div>
+      </div></details>
     </section>
 
     <section class="card">
-      <h2><b>4</b>จุดวัดและระยะเวลาคำนวณ</h2>
-      <div class="grid">
-        <label class="full">จุดวัดแรงดัน — หนึ่งจุดต่อบรรทัด: x y z<textarea id="probes">35 15 1  # south
+      <h2><b>4</b>เวลา จุดวัด และค่าคำนวณ</h2>
+      <div class="grid three">
+        <label>คำนวณถึงเวลา (s)<input id="end_time" type="number" step="any" value="0.0125"></label>
+        <label>บันทึกผลทุก (s)<input id="write_interval" type="number" step="any" value="2.5e-5"></label>
+        <label>CPU สูงสุด<input id="mpi" type="number" value="10"></label>
+      </div>
+      <details class="settings"><summary>จุดวัดและ Time step เพิ่มเติม</summary><div class="settings-body"><div class="grid">
+        <label class="full">จุดวัด — หนึ่งจุดต่อบรรทัด: x y z<textarea id="probes">35 15 1  # south
 40 20 1  # east
 35 25 1  # near wall</textarea></label>
-        <label>คำนวณถึงเวลา (s)<input id="end_time" type="number" step="any" value="0.0125"></label>
         <label>ก้าวเวลาเริ่มต้น (s)<input id="delta_t" type="number" step="any" value="5e-8"></label>
         <label>ก้าวเวลาสูงสุด (s)<input id="max_delta_t" type="number" step="any" value="2.5e-7"></label>
         <label>ค่าคุมความเสถียร<input id="max_co" type="number" step="any" value="0.3"></label>
-        <label>บันทึกผลทุก (s)<input id="write_interval" type="number" step="any" value="2.5e-5"></label>
-        <label>จำนวน CPU<input id="mpi" type="number" value="10"></label>
         <label>แรงดันอากาศเริ่มต้น (Pa)<input id="ambient_pressure" type="number" step="any" value="101298"></label>
-        <label>แรงดันสำหรับดูแนวคลื่น (Pa)<input id="iso_pressure" type="number" step="any" value="110000"></label>
-      </div>
-      <div class="checks"><label><input id="binary" type="checkbox" checked>เขียน full fields แบบ binary</label></div>
+        <label>แรงดันแนวคลื่น (Pa)<input id="iso_pressure" type="number" step="any" value="110000"></label>
+      </div><div class="checks"><label><input id="binary" type="checkbox" checked>บันทึก Field แบบประหยัดพื้นที่</label></div></div></details>
+      <p class="hint">Server จะใช้ CPU ไม่เกินค่านี้ และยังคงเหลือทรัพยากรให้ระบบอื่น</p>
     </section>
+  </div></div>
 
+  <div id="tab-review" class="tab-panel"><div class="steps">
     <section class="card">
-      <h2><b>5</b>ตรวจครั้งสุดท้ายและสร้างชุดไฟล์สำหรับ Server</h2>
+      <h2><b>5</b>ตรวจและสร้างหลาย Case</h2>
       <div class="grid">
-        <label>ชื่องาน<input id="case_name" value="urbanBlast3D"></label>
-        <label class="wide">โฟลเดอร์เก็บงาน<input id="output" type="text"></label>
+        <label>ชื่อ Case<span class="required-badge">REQUIRED</span><input id="case_name" value="urbanBlast3D"></label>
+        <div class="wide"><label>โฟลเดอร์หลักสำหรับเก็บหลาย Case<span class="required-badge">SELECT</span></label><div class="field-action"><input id="output" type="text" readonly placeholder="ยังไม่ได้เลือกตำแหน่งบันทึก"><button type="button" onclick="chooseOutputFolder()">เลือกโฟลเดอร์…</button></div><p id="output_hint" class="hint">ต้องเลือกตำแหน่งก่อนสร้าง Case · ระบบจะสร้างโฟลเดอร์ย่อยตามชื่อ Case และไม่เขียนทับ</p></div>
       </div>
       <div class="checks">
-        <label><input id="archive" type="checkbox" checked>รวมเป็น .tar.gz สำหรับส่ง Server</label>
+        <label><input id="archive" type="checkbox" checked>สร้างไฟล์สำรอง .tar.gz เพิ่ม (ไม่ได้ใช้ตอนส่ง — ระบบส่งโฟลเดอร์ Case ด้วย rsync)</label>
         <label><input id="allow_surface_errors" type="checkbox">ยอมสร้างไฟล์แม้โมเดลยังมีรอยขาด (ไม่แนะนำ)</label>
       </div>
       <div class="buttons">
         <button onclick="validateCase()">ตรวจความพร้อม</button>
-        <button class="success" onclick="exportCase()">สร้างชุดไฟล์สำหรับ Server</button>
+        <button class="success" onclick="exportCase()">สร้าง Case นี้</button>
+        <button class="secondary" onclick="prepareNextCase()">ตั้งชื่อ Case ถัดไป</button>
       </div>
-      <pre id="result_output" class="output">ยังไม่ได้ตรวจ Config</pre>
+      <pre id="result_output" class="output">เลือกโฟลเดอร์หลัก ตั้งชื่อ Case แล้วจึงตรวจและสร้าง</pre>
+      <div class="case-library">
+        <div class="case-library-head"><strong>LOCAL CASE LIBRARY</strong><span id="local_case_count">ยังไม่ได้เลือกโฟลเดอร์</span></div>
+        <div id="local_cases_review" class="case-library-list"><div class="case-row"><span>Case ที่สร้างแล้วจะแสดงที่นี่</span></div></div>
+      </div>
     </section>
-  </div>
+  </div></div>
+
+  <div id="tab-server" class="tab-panel"><div class="steps">
+    <section class="card">
+      <div class="connection-head"><h2><b>6</b>เชื่อม SSH Server</h2><span id="server_connection_status" class="connection-state">ยังไม่ทดสอบ</span></div>
+      <div class="connection-path"><span>Mac WebUI</span><i>→</i><span>SSH Server</span><i>→</i><span>Docker</span><i>→</i><span>blastFoam</span></div>
+      <div class="grid">
+        <label>IP / Hostname<input id="server_host" placeholder="192.168.1.50"></label>
+        <label>ชื่อผู้ใช้<input id="server_user" placeholder="sedswclab01"></label>
+        <label>SSH port<input id="server_port" type="number" value="22"></label>
+        <label>Password — ใช้เฉพาะครั้งแรก<input id="server_password" type="password" autocomplete="current-password"></label>
+      </div>
+      <div class="buttons">
+        <button class="secondary" onclick="installServerKey()">ตั้งค่า SSH ครั้งแรก</button>
+        <button onclick="testServerConnection()">ทดสอบ Server</button>
+      </div>
+      <p class="hint">ใช้ SSH port ของ Ubuntu ปกติคือ 22 · Password จะไม่ถูกบันทึก หลังตั้งค่าครั้งแรกระบบจะใช้ SSH key</p>
+      <details class="settings"><summary>SSH private key</summary><div class="settings-body"><label>ตำแหน่งไฟล์ Key<input id="ssh_key"></label></div></details>
+      <pre id="server_test_output" class="output">กรอก IP และชื่อผู้ใช้ แล้วกด “ทดสอบ Server”</pre>
+    </section>
+
+    <section class="card">
+      <div class="connection-head"><h2><b>7</b>เชื่อม Docker และตรวจ blastFoam</h2><span id="docker_connection_status" class="connection-state">ยังไม่ทดสอบ</span></div>
+      <div class="grid">
+        <label class="wide">Container ที่ติดตั้ง blastFoam<input id="server_container" list="server_containers" placeholder="ubuntu2204openfoam"><datalist id="server_containers"></datalist></label>
+        <label class="wide">Image ที่ใช้เปิดงานคำนวณ<input id="docker_image" list="docker_images" placeholder="ubuntu2204openfoam:blasturban-ready"><datalist id="docker_images"></datalist></label>
+      </div>
+      <div class="buttons">
+        <button onclick="checkServer()">ทดสอบ Docker</button>
+        <button class="secondary" onclick="prepareContainerImage()">ติดตั้ง VTK + สร้าง Image</button>
+      </div>
+      <p class="hint">ระบบเชื่อม Docker ผ่าน SSH Server โดยตรง · พอร์ต 18080 → 8080 เป็นพอร์ต Web ภายใน Container ไม่ใช่พอร์ตเชื่อม Docker</p>
+      <details class="settings"><summary>ตัวเลือก Docker เพิ่มเติม</summary><div class="settings-body">
+        <div class="grid">
+          <label class="wide">ชื่อ Image ใหม่หลังติดตั้ง VTK<input id="ready_docker_image" value="ubuntu2204openfoam:blasturban-ready"></label>
+          <label>Platform<select id="docker_platform"><option value="">อัตโนมัติ</option><option value="linux/amd64">linux/amd64</option><option value="linux/arm64">linux/arm64</option></select></label>
+        </div>
+        <div class="buttons"><button class="secondary" onclick="pushDockerImage()">ส่ง Image จาก Mac</button></div>
+      </div></details>
+      <div id="server_environment" class="server-summary">ยังไม่ได้อ่าน Docker บน Server</div>
+      <pre id="docker_test_output" class="output">เมื่อ Server เชื่อมแล้ว กด “ทดสอบ Docker”</pre>
+    </section>
+
+    <section class="card">
+      <div class="connection-head"><h2><b>8</b>ตั้งค่าทรัพยากรและส่งคำนวณ</h2><span id="full_connection_status" class="connection-state">ยังไม่ทดสอบ</span></div>
+      <div class="grid">
+        <label>การเลือก CPU<select id="server_core_mode"><option value="auto" selected>Auto — ดู load และกัน 2 thread</option><option value="manual">กำหนดเอง</option></select></label>
+        <label>CPU สูงสุด<input id="server_cores" type="number" value="8" min="1"></label>
+        <label>RAM limit (GiB)<input id="server_memory" type="number" value="48" min="2"></label>
+        <label>ชื่อ Case บน Server<input id="server_case_name"></label>
+        <div class="full"><label>Case จาก Mac ที่จะส่ง<span class="required-badge">SELECT</span></label><div class="field-action"><select id="local_case_select" onchange="selectLocalCaseFromLibrary()"><option value="">— ต้องเลือก Case ก่อนส่ง —</option></select><button type="button" onclick="chooseLocalCaseFolder()">Open Case…</button></div><input id="local_case_path" readonly placeholder="ยังไม่ได้เลือก Case"><p id="latest_case_hint" class="hint">ระบบจะแนะนำ Case ล่าสุด แต่จะไม่ส่งจนกว่าคุณจะเลือกยืนยัน</p></div>
+        <label class="wide">โฟลเดอร์งานบน Server<input id="remote_root" placeholder="/home/ชื่อผู้ใช้/BlastUrbanJobs"></label>
+      </div>
+      <div class="buttons">
+        <button onclick="testAllConnections()">ทดสอบทั้งหมด</button>
+        <button class="success" onclick="submitServerJob()">ส่งและเริ่มคำนวณ</button>
+        <button class="secondary" onclick="serverStatus()">ดูสถานะ</button>
+        <button class="secondary" onclick="fetchServerLogs()">อ่าน Log ล่าสุด</button>
+        <button class="secondary" onclick="fetchServerResult()">ดึงผล Web 3D</button>
+        <button class="secondary" onclick="showTab('results');refreshServerJobs()">เคลียงาน</button>
+        <button class="danger" onclick="stopServerJob()">หยุดงาน</button>
+      </div>
+      <details class="settings"><summary>ตำแหน่งรับผลบน Mac</summary><div class="settings-body"><label>โฟลเดอร์รับผล<input id="fetch_output"></label></div></details>
+      <pre id="server_output" class="output">กด “ทดสอบทั้งหมด” ระบบจะตรวจ Server → Docker → Image → VTK ก่อนส่งงาน</pre>
+    </section>
+  </div></div>
+
+  <div id="tab-results" class="tab-panel"><div class="steps">
+    <section class="card">
+      <h2><b>9</b>ผลลัพธ์ 3D และพื้นที่บน Server</h2>
+      <p class="hint">ใช้ข้อมูล SSH จาก Tab “ส่ง Server” · รายการนี้แสดงเฉพาะงานในโฟลเดอร์ที่กำหนดไว้</p>
+      <div class="grid">
+        <label class="wide">งานบน Server<select id="server_job_select"><option value="">กด “อ่านรายการงาน” ก่อน</option></select></label>
+        <label>ลบงานที่จบแล้วเก่ากว่า (วัน)<input id="cleanup_days" type="number" min="1" max="36500" value="30"></label>
+      </div>
+      <div class="buttons">
+        <button class="secondary" onclick="refreshServerJobs()">อ่านรายการงาน</button>
+        <button onclick="useSelectedServerJob()">เลือกงานนี้</button>
+        <button class="success" onclick="fetchSelectedServerResult()">ดึงและแสดงผล 3D</button>
+        <button class="danger" onclick="deleteSelectedServerJob()">ลบงานที่เลือก</button>
+        <button class="secondary" onclick="cleanupOldServerJobs()">เคลียงานเก่า</button>
+      </div>
+      <div id="server_disk_summary" class="server-summary">ยังไม่ได้อ่านพื้นที่ Server</div>
+      <pre id="jobs_output" class="output">ระบบจะไม่ลบงานที่มีสถานะ queued, running หรือ postprocessing</pre>
+      <div class="buttons"><button id="open_result_button" class="secondary" onclick="openResultWindow()" disabled>เปิดผลลัพธ์เต็มหน้าต่าง</button></div>
+      <iframe id="result_viewer" class="result-viewer" title="ผลการคำนวณ Air blast 3D" hidden></iframe>
+    </section>
+  </div></div>
 </main>
+<div id="toast_stack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
 <div id="busy"><div><div class="spinner"></div><span id="busy_text">กำลังทำงาน…</span></div></div>
 <script>
   const ids = [
@@ -168,20 +373,233 @@
   ];
   const checks = ['binary','archive','allow_surface_errors'];
   let uploadedFileKey = '';
+  let serverPollTimer = null;
+  let statusFailures = 0;
+  let previewReloadTimer = null;
+  let uploadPromise = null;
+  let uploadPromiseKey = '';
+  let importRequest = 0;
+  let previewRequest = 0;
+  let currentResultUrl = '';
+  let recommendedOutput = '';
+  let latestLocalCase = '';
+  let localCaseConfirmed = false;
+  let localCaseRecords = [];
+  const preview = {triangles:[],bounds:null,total:0,sampled:0,yaw:-0.72,pitch:-0.55,zoom:1,drag:false,lastX:0,lastY:0,sourceCheck:null,error:''};
+  const rememberedServerFields=['server_host','server_port','server_user','ssh_key','remote_root','docker_image','server_container','ready_docker_image','docker_platform','server_core_mode','server_cores','server_memory','fetch_output'];
   const el = id => document.getElementById(id);
   const value = id => el(id).value;
+  function showTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(panel=>panel.classList.toggle('active',panel.id===`tab-${name}`));
+    document.querySelectorAll('[data-tab-button]').forEach(button=>button.classList.toggle('active',button.dataset.tabButton===name));
+    if(name==='setup') requestAnimationFrame(drawPreview);
+    if(name==='server'&&!localCaseRecords.length)refreshLocalCases(false);
+  }
   function setBusy(on,text='กำลังทำงาน…') { el('busy_text').textContent=text; el('busy').classList.toggle('show',on); document.querySelectorAll('button').forEach(b=>b.disabled=on); }
   function show(id,text,kind='') { const out=el(id); out.textContent=text; out.className='output '+kind; }
+  function connectionStatus(id,kind,text) { const out=el(id);out.textContent=text;out.className='connection-state'+(kind?' '+kind:''); }
+  function toast(message,kind='ok',timeout=4500) {
+    const item=document.createElement('div');item.className=`toast ${kind}`;item.setAttribute('role',kind==='error'?'alert':'status');
+    const icon=document.createElement('span');icon.className='toast-icon';icon.textContent=kind==='error'?'!':(kind==='warning'?'⚠':'✓');
+    const text=document.createElement('span');text.className='toast-text';text.textContent=message;
+    const close=document.createElement('button');close.type='button';close.className='toast-close';close.setAttribute('aria-label','ปิดข้อความ');close.textContent='×';
+    let timer=null;const remove=()=>{if(timer)clearTimeout(timer);item.classList.add('leaving');setTimeout(()=>item.remove(),190);};close.addEventListener('click',remove);
+    item.append(icon,text,close);el('toast_stack').appendChild(item);
+    while(el('toast_stack').children.length>4)el('toast_stack').firstElementChild.remove();
+    timer=setTimeout(remove,timeout);return item;
+  }
+  function showActiveModel(name,repaired=false) {
+    const out=el('active_model');
+    out.textContent=(repaired?'✓ กำลังใช้โมเดลที่ซ่อมแล้ว: ':'โมเดลที่กำลังใช้: ')+name;
+    out.className='active-model'+(repaired?' repaired':'');
+  }
   function collect() { const data={}; ids.forEach(id=>data[id]=value(id)); checks.forEach(id=>data[id]=el(id).checked); return data; }
+  function serverCollect(includePassword=false) {
+    const names=['server_host','server_port','server_user','ssh_key','remote_root','docker_image','server_container','ready_docker_image','docker_platform','server_core_mode','server_cores','server_memory','local_case_path','server_case_name','fetch_output'];
+    const data={}; names.forEach(id=>data[id]=value(id)); if(includePassword) data.server_password=value('server_password'); return data;
+  }
+  function rememberServerSettings() { const saved={};rememberedServerFields.forEach(id=>saved[id]=value(id));localStorage.setItem('blasturban-server',JSON.stringify(saved)); }
+  function restoreServerSettings() { try { const saved=JSON.parse(localStorage.getItem('blasturban-server')||'{}');rememberedServerFields.forEach(id=>{if(saved[id]!==undefined)el(id).value=saved[id];}); } catch(_) {} }
   async function api(path,options={}) { const response=await fetch(path,options); const data=await response.json(); if(!response.ok) throw new Error(data.error||`HTTP ${response.status}`); return data; }
+  function caseNameFromPath(path){return path.split('/').filter(Boolean).pop()||'';}
+  function setSelectedLocalCase(path,notify=true) {
+    if(!path)return false;
+    const select=el('local_case_select');
+    if(![...select.options].some(option=>option.value===path)){
+      const option=document.createElement('option');option.value=path;option.textContent=caseNameFromPath(path)+' · เลือกจาก Finder';select.appendChild(option);
+    }
+    select.value=path;el('local_case_path').value=path;el('server_case_name').value=caseNameFromPath(path);
+    localCaseConfirmed=true;
+    if(notify)toast(`เลือก Case “${caseNameFromPath(path)}” สำหรับส่ง Server แล้ว`,'ok');
+    return true;
+  }
+  function selectLocalCaseFromLibrary(){
+    const path=value('local_case_select');
+    if(!path){el('local_case_path').value='';el('server_case_name').value='';localCaseConfirmed=false;return;}
+    setSelectedLocalCase(path);
+  }
+  function renderLocalCases(records,parent) {
+    localCaseRecords=records;
+    const select=el('local_case_select'),review=el('local_cases_review'),previous=localCaseConfirmed?value('local_case_path'):'';
+    select.textContent='';const prompt=document.createElement('option');prompt.value='';prompt.textContent='— ต้องเลือก Case ก่อนส่ง —';select.appendChild(prompt);
+    review.textContent='';
+    records.forEach(record=>{
+      const option=document.createElement('option');option.value=record.path;option.textContent=`${record.name} · ${new Date(record.updated_epoch*1000).toLocaleString('th-TH')}`;select.appendChild(option);
+      const row=document.createElement('div');row.className='case-row';
+      const info=document.createElement('span');info.textContent=record.name;
+      const meta=document.createElement('small');const parts=[];if(record.charge_mass!==null&&record.charge_mass!==undefined)parts.push(`${record.charge_mass} kg`);if(record.end_time!==null&&record.end_time!==undefined)parts.push(`${record.end_time} s`);if(record.mpi_ranks)parts.push(`${record.mpi_ranks} MPI`);meta.textContent=parts.join(' · ')||'generated case';info.append(document.createElement('br'),meta);
+      const use=document.createElement('button');use.type='button';use.className='secondary';use.textContent='เลือกส่ง';use.addEventListener('click',()=>setSelectedLocalCase(record.path));row.append(info,use);review.appendChild(row);
+    });
+    if(!records.length){const row=document.createElement('div');row.className='case-row';row.textContent='ยังไม่มี Case ในโฟลเดอร์นี้';review.appendChild(row);}
+    el('local_case_count').textContent=`${records.length} Case · ${parent}`;
+    if(previous&&records.some(record=>record.path===previous)){select.value=previous;}else if(previous){const kept=document.createElement('option');kept.value=previous;kept.textContent=caseNameFromPath(previous)+' · เลือกจาก Finder';select.appendChild(kept);select.value=previous;}else{select.value='';}
+    if(records.length){latestLocalCase=records[0].path;el('latest_case_hint').textContent=`แนะนำล่าสุด: ${records[0].path} · กรุณาเลือกเพื่อยืนยันก่อนส่ง`;}
+    else if(latestLocalCase){el('latest_case_hint').textContent=`แนะนำล่าสุด: ${latestLocalCase} · ใช้ Open Case… เพื่อเลือก`;}
+  }
+  async function refreshLocalCases(notify=false,parentOverride='') {
+    const parent=parentOverride||value('output')||(latestLocalCase?latestLocalCase.split('/').slice(0,-1).join('/'):recommendedOutput);
+    try {const data=await api('/api/local/cases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({output:parent})});renderLocalCases(data.cases,data.parent);if(notify)toast(`พบ ${data.cases.length} Case ในโฟลเดอร์นี้`,'ok');}
+    catch(error){if(notify)toast('อ่านรายการ Case ไม่สำเร็จ\n'+error.message,'error',7000);}
+  }
+  async function chooseOutputFolder() {
+    setBusy(true,'กำลังเปิดหน้าต่างเลือกโฟลเดอร์…');
+    try {const data=await api('/api/local/select-folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({purpose:'output',suggested:value('output')||recommendedOutput})});if(data.cancelled)return;el('output').value=data.path;el('output_hint').textContent=`Case แต่ละงานจะถูกสร้างเป็นโฟลเดอร์ย่อยใน ${data.path}`;await refreshLocalCases(false,data.path);toast('เลือกตำแหน่งบันทึกหลาย Case แล้ว','ok');}
+    catch(error){toast('เลือกโฟลเดอร์ไม่สำเร็จ\n'+error.message,'error',8000);}finally{setBusy(false);}
+  }
+  async function chooseLocalCaseFolder() {
+    setBusy(true,'กำลังเปิด Case จาก Mac…');
+    try {const data=await api('/api/local/select-folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({purpose:'case',suggested:latestLocalCase||value('output')||recommendedOutput})});if(data.cancelled)return;setSelectedLocalCase(data.path);}
+    catch(error){toast('เลือก Case ไม่สำเร็จ\n'+error.message,'error',8000);}finally{setBusy(false);}
+  }
+  function prepareNextCase() {
+    const current=value('case_name').trim()||'urbanBlast3D';const match=current.match(/^(.*?)-(\d{3})$/);const root=match?match[1]:current;let number=match?Number(match[2])+1:2;const used=new Set(localCaseRecords.map(record=>record.name));let candidate;
+    do{candidate=`${root}-${String(number++).padStart(3,'0')}`;}while(used.has(candidate));
+    el('case_name').value=candidate;show('result_output',`พร้อมสร้าง Case ถัดไป: ${candidate}\nค่าพารามิเตอร์เดิมยังคงอยู่ กรุณาปรับค่าที่ต้องการแล้วตรวจอีกครั้ง`,'warning');toast(`ตั้งชื่อ Case ถัดไปเป็น ${candidate}`,'warning');
+  }
+  const finiteNumber = (id,fallback=0) => { const n=Number(value(id)); return Number.isFinite(n)?n:fallback; };
+  function previewDomain() {
+    const minimum=['xmin','ymin','zmin'].map(id=>finiteNumber(id));
+    const maximum=['xmax','ymax','zmax'].map((id,i)=>finiteNumber(id,minimum[i]+1));
+    return {minimum,maximum,span:maximum.map((n,i)=>Math.max(n-minimum[i],1e-9)),centre:maximum.map((n,i)=>(n+minimum[i])/2)};
+  }
+  function chargeRadius() {
+    const mass=finiteNumber('mass'), density=finiteNumber('density');
+    return mass>0&&density>0?Math.cbrt(3*mass/(4*Math.PI*density)):0;
+  }
+  function sourceSignature(){return [value('stl_path'),value('scale'),value('charge_x'),value('charge_y'),value('charge_z'),value('mass'),value('density'),value('xmin'),value('ymin'),value('zmin'),value('xmax'),value('ymax'),value('zmax')].join('|');}
+  function projectPoint(point,width,height,domain) {
+    const x=point[0]-domain.centre[0], y=point[1]-domain.centre[1], z=point[2]-domain.centre[2];
+    const cy=Math.cos(preview.yaw),sy=Math.sin(preview.yaw),cp=Math.cos(preview.pitch),sp=Math.sin(preview.pitch);
+    const xr=cy*x-sy*y, yr=sy*x+cy*y;
+    const ys=cp*yr-sp*z, depth=sp*yr+cp*z;
+    const scale=preview.zoom*Math.min(width,height)/(1.75*Math.max(...domain.span,1));
+    return {x:width/2+xr*scale,y:height/2-ys*scale,depth,scale};
+  }
+  function drawWorldLine(ctx,a,b,width,height,domain,color,lineWidth=1,dash=[]) {
+    const pa=projectPoint(a,width,height,domain),pb=projectPoint(b,width,height,domain);
+    ctx.beginPath();ctx.setLineDash(dash);ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.strokeStyle=color;ctx.lineWidth=lineWidth;ctx.stroke();ctx.setLineDash([]);
+  }
+  function parsePreviewProbes() {
+    return value('probes').split(/\n/).map(line=>line.split('#')[0].trim().split(/\s+/).slice(0,3).map(Number)).filter(p=>p.length===3&&p.every(Number.isFinite));
+  }
+  function updatePreviewText() {
+    const domain=previewDomain(),radius=chargeRadius(),centre=['charge_x','charge_y','charge_z'].map(id=>finiteNumber(id)),sourceValid=finiteNumber('mass')>0&&finiteNumber('density')>0;
+    const inside=centre.every((n,i)=>n-radius>=domain.minimum[i]&&n+radius<=domain.maximum[i]);
+    el('source_position_summary').textContent=`Source: (${centre.map(n=>n.toFixed(3)).join(', ')}) m`;
+    el('source_size_summary').textContent=`รัศมี ≈ ${radius.toPrecision(4)} m · Ø ${(2*radius).toPrecision(4)} m`;
+    const status=el('source_domain_status'),checked=preview.sourceCheck&&preview.sourceCheck.signature===sourceSignature()?preview.sourceCheck:null;
+    if(!sourceValid){status.textContent='⚠ มวลและความหนาแน่นต้องมากกว่า 0';status.style.color='var(--red)';status.style.background='var(--redbg)';}
+    else if(checked){status.textContent=(checked.level==='ok'?'✓ ':'⚠ ')+checked.message;status.style.color=checked.level==='ok'?'var(--green)':(checked.level==='warning'?'var(--amber)':'var(--red)');status.style.background=checked.level==='ok'?'var(--greenbg)':(checked.level==='warning'?'var(--amberbg)':'var(--redbg)');}
+    else {status.textContent=inside?'✓ อยู่ภายใน Domain · กดตรวจผิวอาคารเพื่อยืนยัน':'⚠ Source หรือขนาดล้ำออกนอก Domain';status.style.color=inside?'var(--green)':'var(--red)';status.style.background=inside?'var(--greenbg)':'var(--redbg)';}
+    const modelSpan=preview.bounds?preview.bounds.maximum.map((n,i)=>n-preview.bounds.minimum[i]):[0,0,0];
+    const cells=['nx','ny','nz'].map(id=>Math.max(1,finiteNumber(id,1)));
+    const cell=domain.span.map((n,i)=>n/cells[i]);
+    el('preview_stats').textContent=preview.error||`โมเดล ${modelSpan.map(n=>n.toPrecision(4)).join(' × ')} m\nDomain ${domain.span.map(n=>n.toPrecision(4)).join(' × ')} m\nGrid ${cells.map(Math.round).join(' × ')} ช่อง\nCell ≈ ${cell.map(n=>n.toPrecision(3)).join(' × ')} m\nPreview ${preview.sampled.toLocaleString()} / ${preview.total.toLocaleString()} triangles`;
+  }
+  function drawPreview() {
+    const canvas=el('model_preview'),rect=canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);
+    if(!rect.width||!rect.height) return;
+    if(canvas.width!==Math.round(rect.width*dpr)||canvas.height!==Math.round(rect.height*dpr)){canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);}
+    const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);const width=rect.width,height=rect.height;
+    ctx.clearRect(0,0,width,height);const domain=previewDomain(),mn=domain.minimum,mx=domain.maximum;
+    const gridOn=el('show_grid').checked,domainOn=el('show_domain').checked;
+    if(gridOn){
+      for(let i=0;i<=10;i++){const t=i/10,x=mn[0]+domain.span[0]*t,y=mn[1]+domain.span[1]*t,z=mn[2]+domain.span[2]*t;
+        drawWorldLine(ctx,[x,mn[1],mn[2]],[x,mx[1],mn[2]],width,height,domain,'#47546788');
+        drawWorldLine(ctx,[mn[0],y,mn[2]],[mx[0],y,mn[2]],width,height,domain,'#47546788');
+        drawWorldLine(ctx,[mn[0],mx[1],z],[mx[0],mx[1],z],width,height,domain,'#34405455');
+        drawWorldLine(ctx,[mn[0],mn[1],z],[mn[0],mx[1],z],width,height,domain,'#34405455');
+      }
+    }
+    if(domainOn){
+      const c=[[mn[0],mn[1],mn[2]],[mx[0],mn[1],mn[2]],[mx[0],mx[1],mn[2]],[mn[0],mx[1],mn[2]],[mn[0],mn[1],mx[2]],[mx[0],mn[1],mx[2]],[mx[0],mx[1],mx[2]],[mn[0],mx[1],mx[2]]];
+      [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].forEach(e=>drawWorldLine(ctx,c[e[0]],c[e[1]],width,height,domain,'#98a2b3',1.4,[5,4]));
+    }
+    const axisLength=Math.max(...domain.span)*0.16,origin=[mn[0],mn[1],mn[2]];
+    [['X',[origin[0]+axisLength,origin[1],origin[2]],'#f97066'],['Y',[origin[0],origin[1]+axisLength,origin[2]],'#32d583'],['Z',[origin[0],origin[1],origin[2]+axisLength],'#53b1fd']].forEach(([name,end,color])=>{drawWorldLine(ctx,origin,end,width,height,domain,color,3);const p=projectPoint(end,width,height,domain);ctx.fillStyle=color;ctx.font='bold 13px sans-serif';ctx.fillText(name,p.x+5,p.y-4);});
+    if(preview.triangles.length){
+      const projected=preview.triangles.map(t=>{const p=[projectPoint(t.slice(0,3),width,height,domain),projectPoint(t.slice(3,6),width,height,domain),projectPoint(t.slice(6,9),width,height,domain)];return {p,depth:(p[0].depth+p[1].depth+p[2].depth)/3};}).sort((a,b)=>a.depth-b.depth);
+      const style=value('preview_style');
+      projected.forEach(face=>{ctx.beginPath();ctx.moveTo(face.p[0].x,face.p[0].y);ctx.lineTo(face.p[1].x,face.p[1].y);ctx.lineTo(face.p[2].x,face.p[2].y);ctx.closePath();if(style!=='edges'){ctx.fillStyle='rgba(83,177,253,.34)';ctx.fill();}if(style!=='surface'){ctx.strokeStyle=style==='edges'?'rgba(132,202,255,.62)':'rgba(178,221,255,.28)';ctx.lineWidth=.65;ctx.stroke();}});
+    }
+    if(el('show_probes').checked){parsePreviewProbes().forEach((point,index)=>{const p=projectPoint(point,width,height,domain);ctx.fillStyle='#f97066';ctx.beginPath();ctx.arc(p.x,p.y,3.5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fda29b';ctx.font='11px sans-serif';ctx.fillText(`P${index+1}`,p.x+5,p.y-5);});}
+    if(el('show_source').checked){const centre=['charge_x','charge_y','charge_z'].map(id=>finiteNumber(id)),p=projectPoint(centre,width,height,domain),rp=chargeRadius()*p.scale,visible=Math.max(rp,3);
+      ctx.beginPath();ctx.arc(p.x,p.y,visible,0,Math.PI*2);ctx.fillStyle='rgba(247,144,9,.75)';ctx.fill();ctx.strokeStyle='#fec84b';ctx.lineWidth=2;ctx.stroke();if(rp<7){ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.setLineDash([3,3]);ctx.strokeStyle='#fdb022';ctx.stroke();ctx.setLineDash([]);}ctx.fillStyle='#ffd28a';ctx.font='bold 12px sans-serif';ctx.fillText(`Source Ø ${(2*chargeRadius()).toPrecision(3)} m`,p.x+11,p.y-9);
+    }
+    updatePreviewText();
+  }
+  async function refreshPreview() {
+    const request=++previewRequest;
+    try { await ensureUpload(); if(request!==previewRequest||!value('stl_path')) return; preview.error='กำลังอ่านโมเดล…';drawPreview();
+      const data=await api('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stl_path:value('stl_path'),scale:value('scale')})});
+      if(request!==previewRequest)return;preview.error='';preview.triangles=data.triangles;preview.bounds=data.bounds;preview.total=data.total_triangles;preview.sampled=data.sampled_triangles;fitPreview();
+    } catch(error){if(request!==previewRequest)return;preview.error='เปิด Preview ไม่สำเร็จ\n'+error.message;drawPreview();}
+  }
+  function schedulePreviewReload(){clearTimeout(previewReloadTimer);previewReloadTimer=setTimeout(refreshPreview,450);}
+  function setPreviewView(view){if(view==='xy'){preview.yaw=0;preview.pitch=0;}else if(view==='xz'){preview.yaw=0;preview.pitch=-Math.PI/2;}else if(view==='yz'){preview.yaw=-Math.PI/2;preview.pitch=-Math.PI/2;}else{preview.yaw=-.72;preview.pitch=-.55;}preview.zoom=1;drawPreview();}
+  function fitPreview(){preview.zoom=1;drawPreview();}
   async function ensureUpload() {
     const file=el('stl_file').files[0];
     if(!file) return;
     const key=`${file.name}:${file.size}:${file.lastModified}`;
     if(key===uploadedFileKey && value('stl_path')) return;
-    const safeName=file.name.replace(/[^A-Za-z0-9_.-]+/g,'_');
-    const data=await api('/api/upload',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':safeName},body:file});
-    el('stl_path').value=data.path; uploadedFileKey=key;
+    if(uploadPromise&&uploadPromiseKey===key)return uploadPromise;
+    uploadPromiseKey=key;
+    uploadPromise=(async()=>{const safeName=file.name.replace(/[^A-Za-z0-9_.-]+/g,'_');
+      const data=await api('/api/upload',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':safeName},body:file});
+      const active=el('stl_file').files[0],activeKey=active?`${active.name}:${active.size}:${active.lastModified}`:'';
+      if(activeKey!==key)return;
+      el('stl_path').value=data.path;uploadedFileKey=key;showActiveModel(file.name,false);
+    })();
+    try { await uploadPromise; } finally { if(uploadPromiseKey===key){uploadPromise=null;uploadPromiseKey='';} }
+  }
+  async function importSelectedModel() {
+    const file=el('stl_file').files[0];if(!file)return;
+    const request=++importRequest;
+    uploadedFileKey='';el('stl_path').value='';preview.triangles=[];preview.bounds=null;preview.error='กำลังนำเข้าโมเดล…';drawPreview();
+    const active=el('active_model');active.textContent=`กำลังนำเข้า: ${file.name} (${formatBytes(file.size)})`;active.className='active-model';
+    show('surface_output','กำลังคัดลอกและตรวจรูปแบบ STL…','warning');setBusy(true,'กำลังนำเข้าโมเดล STL…');
+    try {
+      await ensureUpload();if(request!==importRequest)return;
+      const payload=collect();payload.external=false;
+      const data=await api('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(request!==importRequest)return;
+      showActiveModel(file.name,false);
+      if(data.errors.length){
+        show('surface_output',`นำเข้าไฟล์สำเร็จ แต่พบปัญหาที่ผิวโมเดล\n${data.friendly_summary}\n\nกด “ตรวจ ซ่อม และตั้งค่า Auto” เพื่อให้ระบบลองซ่อม`,'error');
+        toast('นำเข้าโมเดลแล้ว แต่พบผิวที่ต้องซ่อม','warning',6500);
+      } else {
+        show('surface_output',`✓ นำเข้าโมเดลสำเร็จ\n${data.friendly_summary}`,(data.warnings.length?'warning':'ok'));
+        toast('นำเข้าโมเดลสำเร็จ',data.warnings.length?'warning':'ok');
+      }
+      show('technical_output',data.summary,data.errors.length?'error':(data.warnings.length?'warning':'ok'));
+      await refreshPreview();
+    } catch(error) {
+      if(request!==importRequest)return;
+      uploadedFileKey='';el('stl_path').value='';preview.triangles=[];preview.bounds=null;preview.error='นำเข้าโมเดลไม่สำเร็จ';drawPreview();
+      showActiveModel('ยังไม่มีโมเดลที่ใช้งาน',false);
+      show('surface_output',`นำเข้าโมเดลไม่สำเร็จ: ${error.message}\n\nตรวจว่าไฟล์เป็น STL จริง ไม่เสียหาย และมี triangles อย่างน้อย 1 ชิ้น`,'error');
+      toast('นำเข้าโมเดลไม่สำเร็จ\n'+error.message,'error',8000);
+    } finally {if(request===importRequest)setBusy(false);}
   }
   function applyAuto(a) {
     ['xmin','ymin','zmin'].forEach((id,i)=>el(id).value=a.domain_min[i]);
@@ -189,6 +607,7 @@
     ['nx','ny','nz'].forEach((id,i)=>el(id).value=a.divisions[i]);
     el('surface_min').value=a.surface_levels[0]; el('surface_max').value=a.surface_levels[1]; el('feature_level').value=a.feature_level;
     ['location_x','location_y','location_z'].forEach((id,i)=>el(id).value=a.location[i]);
+    drawPreview();
   }
   async function checkSurface(auto) {
     setBusy(true,auto?'กำลังตรวจและจัดพื้นที่คำนวณ…':'กำลังตรวจโมเดล…');
@@ -196,18 +615,20 @@
       await ensureUpload(); const payload=collect(); payload.auto=auto;
       const data=await api('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const kind=data.errors.length?'error':(data.warnings.length?'warning':'ok'); show('surface_output',data.friendly_summary,kind);
-      show('technical_output',data.summary,kind); if(data.auto_values) applyAuto(data.auto_values);
-    } catch(error) { show('surface_output','ERROR: '+error.message,'error'); } finally { setBusy(false); }
+      show('technical_output',data.summary,kind); if(data.auto_values) applyAuto(data.auto_values); await refreshPreview();
+      toast(data.errors.length?'ตรวจโมเดลเสร็จ แต่พบจุดที่ต้องซ่อม':'ตรวจโมเดลสำเร็จ',kind,data.errors.length?6500:4500);
+    } catch(error) { show('surface_output','ERROR: '+error.message,'error');toast('ตรวจโมเดลไม่สำเร็จ\n'+error.message,'error',8000); } finally { setBusy(false); }
   }
   async function repairAndAuto() {
     setBusy(true,'กำลังซ่อมรอยขาด ตรวจซ้ำ และตั้งค่าพื้นที่ให้…');
     try {
       await ensureUpload(); const data=await api('/api/repair-auto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
-      el('stl_path').value=data.path; applyAuto(data.auto_values);
+      el('stl_path').value=data.path; applyAuto(data.auto_values); showActiveModel(data.active_name,true);
       const kind=data.errors.length?'error':(data.warnings.length?'warning':'ok');
       show('surface_output',data.repair_summary+'\n\n'+data.friendly_summary,kind);
-      show('technical_output',data.summary,kind);
-    } catch(error) { show('surface_output','ซ่อมอัตโนมัติไม่สำเร็จ: '+error.message+'\nไฟล์ต้นฉบับไม่ได้ถูกแก้ไข','error'); }
+      show('technical_output',data.summary,kind); await refreshPreview();
+      toast(data.errors.length?'ซ่อมแล้ว แต่ยังมีผิวที่ต้องแก้เพิ่ม':'ซ่อมโมเดลและตั้งค่า Auto สำเร็จ',kind,data.errors.length?7000:4500);
+    } catch(error) { show('surface_output','ซ่อมอัตโนมัติไม่สำเร็จ: '+error.message+'\nไฟล์ต้นฉบับไม่ได้ถูกแก้ไข','error');toast('ซ่อมโมเดลไม่สำเร็จ\nไฟล์ต้นฉบับยังปลอดภัย','error',7000); }
     finally { setBusy(false); }
   }
   function autoCharge() {
@@ -216,9 +637,17 @@
     el('charge_level').value=Math.max(1,Math.min(10,Math.ceil(Math.log2(Math.max(base/target,1))))); updateCharge();
   }
   function planesAtCharge() { ['x','y','z'].forEach(a=>el('plane_'+a).value=value('charge_'+a)); }
+  async function checkSourcePosition() {
+    setBusy(true,'กำลังตรวจ Source กับผิวอาคารจริง…');
+    try { await ensureUpload(); const data=await api('/api/source-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
+      preview.sourceCheck={...data,signature:sourceSignature()};drawPreview();toast(data.message,data.level==='ok'?'ok':data.level,5500);
+    } catch(error){preview.sourceCheck={signature:sourceSignature(),level:'error',message:'ตรวจ Source ไม่สำเร็จ: '+error.message};drawPreview();toast('ตรวจ Source ไม่สำเร็จ\n'+error.message,'error',7500);} finally { setBusy(false); }
+  }
   function updateCharge() {
     const mass=Number(value('mass')),rho=Number(value('density')),base=Number(value('target_cell')),level=Number(value('charge_level'));
-    if(mass>0&&rho>0&&base>0) { const r=Math.cbrt(3*mass/rho/(4*Math.PI)), c=base/(2**level); el('charge_summary').textContent=`รัศมีทฤษฎี ${r.toPrecision(5)} m · cell รอบ charge ≈ ${c.toPrecision(5)} m · ${(2*r/c).toFixed(1)} cells/diameter`; }
+    if(mass>0&&rho>0&&base>0) { const r=Math.cbrt(3*mass/rho/(4*Math.PI)), c=base/(2**level); el('charge_summary').textContent=`รัศมีทฤษฎี ${r.toPrecision(5)} m · cell รอบ Source ≈ ${c.toPrecision(5)} m · ${(2*r/c).toFixed(1)} cells/diameter`; }
+    else { el('charge_summary').textContent='กรุณาใส่มวล ความหนาแน่น และขนาดช่องให้มากกว่า 0'; }
+    drawPreview();
   }
   async function validateCase() {
     setBusy(true,'กำลังตรวจ Config และตำแหน่งกับผิว STL…');
@@ -227,19 +656,198 @@
       let text=data.ok?'พร้อมใช้งาน — สร้างชุดไฟล์สำหรับ Server ได้\n':'ยังมีจุดที่ต้องแก้\n';
       data.errors.forEach(x=>text+='  • '+x+'\n'); if(data.warnings.length) { text+='\nWARNING\n'; data.warnings.forEach(x=>text+='  • '+x+'\n'); }
       text+=`\nจำนวนช่องเริ่มต้น: ${data.base_cells.toLocaleString()}\nขนาดช่องจริง: (${data.actual_cell_size.map(x=>x.toPrecision(5)).join(' ')}) m\nรัศมีระเบิด: ${data.charge_radius.toPrecision(6)} m\nRAM โดยประมาณเมื่อใช้เต็ม: ${data.estimate.ram_gib_at_dynamic_cap.toFixed(1)} GiB\nจำนวนช่วงที่บันทึก: ${Math.floor(data.estimate.frames).toLocaleString()}\nพื้นที่เก็บผลกรณีสูงสุด: ${data.estimate.disk_gib_at_dynamic_cap.toFixed(0)} GiB`;
-      show('result_output',text,data.ok?(data.warnings.length?'warning':'ok'):'error'); return data.ok;
-    } catch(error) { show('result_output','ERROR: '+error.message,'error'); return false; } finally { setBusy(false); }
+      const kind=data.ok?(data.warnings.length?'warning':'ok'):'error';show('result_output',text,kind);toast(data.ok?'ตรวจ Case สำเร็จ พร้อมสร้างไฟล์':'Case ยังไม่พร้อม กรุณาดูรายการที่ต้องแก้',kind,data.ok?4500:7000);return data.ok;
+    } catch(error) { show('result_output','ERROR: '+error.message,'error');toast('ตรวจ Case ไม่สำเร็จ\n'+error.message,'error',8000);return false; } finally { setBusy(false); }
   }
   async function exportCase() {
+    if(!value('output')){show('result_output','กรุณากด “เลือกโฟลเดอร์…” และยืนยันตำแหน่งที่จะเก็บ Case ก่อน','error');toast('ต้องเลือกตำแหน่งบันทึก Case ก่อน','error');return;}
     setBusy(true,'กำลังตรวจและสร้างชุดไฟล์สำหรับ Server…');
     try {
       await ensureUpload(); const data=await api('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
+      latestLocalCase=data.target;await refreshLocalCases(false,value('output'));el('latest_case_hint').textContent=`สร้างล่าสุด: ${data.target} · กรุณาเลือก Case นี้ในหน้า Server เพื่อยืนยัน`;
       let text=`สร้างงานสำเร็จ\nโฟลเดอร์งาน: ${data.target}\n`; if(data.archive) text+=`ไฟล์ส่ง Server: ${data.archive}\n`; text+='\nคำสั่งใช้งานอยู่ใน SERVER_COMMANDS.md';
-      if(data.warnings.length) text+='\n\nWARNING\n'+data.warnings.map(x=>'  • '+x).join('\n'); show('result_output',text,data.warnings.length?'warning':'ok');
-    } catch(error) { show('result_output','EXPORT ERROR: '+error.message,'error'); } finally { setBusy(false); }
+      text+='\n\nCase ถูกเพิ่มในรายการแล้ว แต่ยังไม่ถูกเลือกส่ง Server';if(data.warnings.length) text+='\n\nWARNING\n'+data.warnings.map(x=>'  • '+x).join('\n'); show('result_output',text,data.warnings.length?'warning':'ok');toast('สร้าง Case สำเร็จ · เลือกยืนยันในหน้า Server ก่อนส่ง',data.warnings.length?'warning':'ok',6000);
+    } catch(error) { show('result_output','EXPORT ERROR: '+error.message,'error');toast('สร้างชุดไฟล์ไม่สำเร็จ\n'+error.message,'error',8000); } finally { setBusy(false); }
   }
-  fetch('/api/defaults').then(r=>r.json()).then(d=>{el('stl_path').value=d.stl_path;el('output').value=d.output;});
-  ['mass','density','target_cell','charge_level'].forEach(id=>el(id).addEventListener('input',updateCharge)); updateCharge();
+  async function installServerKey() {
+    setBusy(true,'กำลังติดตั้ง SSH key…');
+    try { const data=await api('/api/server/install-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect(true))}); el('server_password').value='';connectionStatus('server_connection_status','warning','ตั้งค่าแล้ว · รอทดสอบ');connectionStatus('full_connection_status','','ยังไม่ทดสอบ');show('server_test_output',data.message+'\nKey: '+data.key+'\n\nกด “ทดสอบ Server” เพื่อยืนยันการเชื่อมต่อ','ok');toast('ตั้งค่า SSH สำเร็จ กรุณาทดสอบ Server','ok'); }
+    catch(error) { connectionStatus('server_connection_status','error','เชื่อมไม่สำเร็จ');connectionStatus('full_connection_status','error','ยังไม่พร้อม');show('server_test_output','ติดตั้ง SSH key ไม่สำเร็จ: '+error.message,'error');toast('เชื่อม Server ไม่สำเร็จ\n'+error.message,'error',8500); } finally { setBusy(false); }
+  }
+  async function testServerConnection() {
+    setBusy(true,'กำลังทดสอบ SSH Server…');connectionStatus('server_connection_status','warning','กำลังทดสอบ…');
+    try {
+      const data=await api('/api/server/test-connection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});
+      connectionStatus('server_connection_status','ok','เชื่อมแล้ว');connectionStatus('full_connection_status','warning','รอทดสอบ Docker');
+      show('server_test_output',`SSH Server พร้อม\nHost: ${data.host}\nUser: ${data.user}\nHome: ${data.home}\nCPU: ${data.cpu_threads} threads · RAM: ${data.memory_gib} GiB · ${data.architecture}`,'ok');
+      toast('เชื่อม SSH Server สำเร็จ','ok');
+    } catch(error) {
+      connectionStatus('server_connection_status','error','เชื่อมไม่สำเร็จ');connectionStatus('full_connection_status','error','ยังไม่พร้อม');
+      show('server_test_output','ทดสอบ Server ไม่สำเร็จ: '+error.message,'error');toast('ทดสอบ Server ไม่สำเร็จ\n'+error.message,'error',8500);
+    } finally { setBusy(false); }
+  }
+  function addDockerImageOption(name) {
+    if(!name || [...el('docker_images').options].some(option=>option.value===name)) return;
+    const option=document.createElement('option'); option.value=name; el('docker_images').appendChild(option);
+  }
+  function addDockerContainerOption(record) {
+    const [name,image,status]=record.split('|');if(!name)return {name:'',image:'',status:''};if(![...el('server_containers').options].some(option=>option.value===name)){
+      const option=document.createElement('option');option.value=name;option.label=`${image||''} · ${status||''}`;el('server_containers').appendChild(option);
+    }
+    return {name,image,status};
+  }
+  async function checkServer(combined=false) {
+    const outputId=combined?'server_output':'docker_test_output';
+    setBusy(true,combined?'กำลังทดสอบเส้นทาง Server → Docker → blastFoam…':'กำลังทดสอบ Docker บน Server…');connectionStatus('docker_connection_status','warning','กำลังทดสอบ…');
+    try {
+      const data=await api('/api/server/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});
+      data.images.forEach(addDockerImageOption);
+      const containerInfo=data.containers.map(addDockerContainerOption),running=containerInfo.filter(x=>x.status.startsWith('Up'));
+      const runningImages=running.map(x=>x.image).filter(Boolean);runningImages.forEach(addDockerImageOption);
+      if(!value('server_container')&&running.length)el('server_container').value=(running.find(x=>x.name==='ubuntu2204openfoam')||running[0]).name;
+      if(!value('docker_image')&&runningImages.length) el('docker_image').value=runningImages[0];
+      else if(!value('docker_image')&&data.images.length) el('docker_image').value=data.images[0];
+      let text=`เชื่อมต่อสำเร็จ: ${data.host}\nเครื่อง: ${data.architecture||'ไม่ทราบ'} · CPU ${data.cpu_threads} threads · RAM ${data.memory_gib} GiB · Disk ว่าง ${data.disk_free_gib} GiB\nDocker: ${data.docker_ok?'พร้อม '+data.docker_version:'ใช้ไม่ได้'}\nsystemd user: ${data.systemd_user_ok?'พร้อม':'ยังไม่พร้อม'}\n\nImages:\n${data.images.map(x=>'  • '+x).join('\n')||'  ไม่พบ image'}`;
+      if(data.containers.length) text+='\n\nContainers ที่มีอยู่:\n'+data.containers.map(x=>'  • '+x).join('\n');
+      const selectedContainerCheck=(data.container_checks||{})[value('server_container')];
+      if(selectedContainerCheck)text+=`\n\nContainer ${value('server_container')}: ${selectedContainerCheck.ok?'มี blastFoam และ VTK พร้อม':(selectedContainerCheck.needs_vtk?'พบ blastFoam แต่ยังไม่มี Python VTK':'ยังไม่พร้อม — '+selectedContainerCheck.detail)}`;
+      if(data.image_check) text+='\n\nImage ที่เลือก: '+(data.image_check.ok?'พร้อมคำนวณและสร้างผล Web':(data.image_check.needs_vtk?'ยังไม่มี Python VTK — ใช้ปุ่มเตรียม Image จาก Container':'ยังไม่พร้อม — '+data.image_check.detail));
+      if(data.remote_root_ok) text+=`\n\nโฟลเดอร์งาน: พร้อมเขียน ${data.remote_root}`;
+      else if(data.recommended_root){el('remote_root').value=data.recommended_root;rememberServerSettings();text+=`\n\nโฟลเดอร์เดิมเขียนไม่ได้: ${data.remote_root_error||data.remote_root}\nเปลี่ยนให้อัตโนมัติเป็น: ${data.recommended_root}`;}
+      el('server_environment').textContent=`Ubuntu ${data.host} · ${data.cpu_threads} CPU threads · RAM ${data.memory_gib} GiB\nContainer ที่พบ: ${data.containers.length?data.containers.map(x=>x.split('|')[0]).join(', '):'ไม่พบ'}\nImage ที่จะใช้สร้างงานใหม่: ${value('docker_image')||'ยังไม่ได้เลือก'}`;
+      const ready=data.docker_ok&&data.systemd_user_ok&&data.remote_root_ok&&data.image_check&&data.image_check.ok;
+      connectionStatus('server_connection_status','ok','เชื่อมแล้ว');
+      if(!data.docker_ok)connectionStatus('docker_connection_status','error','Docker ใช้ไม่ได้');
+      else if(selectedContainerCheck&&selectedContainerCheck.needs_vtk)connectionStatus('docker_connection_status','warning','เชื่อมได้ · ขาด VTK');
+      else if(data.image_check&&!data.image_check.ok)connectionStatus('docker_connection_status','warning','เชื่อมได้ · Image ไม่พร้อม');
+      else connectionStatus('docker_connection_status','ok','เชื่อมแล้ว');
+      connectionStatus('full_connection_status',ready?'ok':'warning',ready?'พร้อมส่งงาน':'ยังต้องตั้งค่า');
+      show(outputId,text,ready?'ok':'warning');toast(ready?'Server + Docker พร้อมส่งงาน':'เชื่อมได้ แต่ยังมีค่าที่ต้องแก้',ready?'ok':'warning',6500);
+      return ready;
+    } catch(error) { connectionStatus('server_connection_status','error','ตรวจ SSH ไม่ผ่าน');connectionStatus('docker_connection_status','error','เชื่อมไม่สำเร็จ');connectionStatus('full_connection_status','error','ยังไม่พร้อม');show(outputId,'ตรวจการเชื่อมต่อไม่สำเร็จ: '+error.message,'error');toast('ตรวจการเชื่อมต่อไม่สำเร็จ\n'+error.message,'error',8500);return false; } finally { setBusy(false); }
+  }
+  async function testAllConnections() { return checkServer(true); }
+  async function prepareContainerImage() {
+    const container=value('server_container'),image=value('ready_docker_image');
+    if(!container||!image){show('docker_test_output','กรุณาเลือก Container และตั้งชื่อ Image ใหม่','error');toast('กรุณาเลือก Container และชื่อ Image','error');return;}
+    if(!confirm(`ระบบจะติดตั้ง Python VTK ใน container “${container}” แล้วสร้าง image “${image}”\nดำเนินการต่อหรือไม่?`))return;
+    setBusy(true,'กำลังติดตั้ง VTK และสร้าง Image จาก Container — อาจใช้เวลาหลายนาที…');
+    try {const data=await api('/api/server/prepare-container-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});el('docker_image').value=data.image;addDockerImageOption(data.image);rememberServerSettings();connectionStatus('docker_connection_status','warning','สร้าง Image แล้ว · รอทดสอบ');connectionStatus('full_connection_status','warning','รอทดสอบทั้งหมด');show('docker_test_output',`${data.message}\nContainer: ${data.container}\nImage: ${data.image}\n${data.detail}\n\nกด “ทดสอบ Docker” อีกครั้งเพื่อยืนยัน`,'ok');toast('เตรียม Image พร้อม blastFoam และ VTK สำเร็จ','ok',6500);}
+    catch(error){connectionStatus('docker_connection_status','error','เตรียม Image ไม่สำเร็จ');show('docker_test_output','เตรียม Image ไม่สำเร็จ: '+error.message,'error');toast('เตรียม Image ไม่สำเร็จ\n'+error.message,'error',10000);}finally{setBusy(false);}
+  }
+  async function pushDockerImage() {
+    if(!value('docker_image')) { show('docker_test_output','กรุณาใส่ชื่อ image เช่น local/blastfoam9:web','error');toast('กรุณาเลือก Docker image','error');return; }
+    setBusy(true,'กำลังบีบอัดและส่ง Docker image ไป Server — ครั้งแรกอาจใช้เวลาหลายนาที…');
+    try { const data=await api('/api/server/push-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});connectionStatus('docker_connection_status','warning','ส่ง Image แล้ว · รอทดสอบ');show('docker_test_output',data.message+'\n'+data.detail+'\n\nกด “ทดสอบ Docker” อีกครั้งเพื่อยืนยัน','ok');toast('ส่ง Docker image ไป Server สำเร็จ','ok'); }
+    catch(error) { connectionStatus('docker_connection_status','error','ส่ง Image ไม่สำเร็จ');show('docker_test_output','ส่ง Docker image ไม่สำเร็จ: '+error.message,'error');toast('ส่ง Docker image ไม่สำเร็จ\n'+error.message,'error',8500); } finally { setBusy(false); }
+  }
+  async function submitServerJob() {
+    if(!localCaseConfirmed||!value('local_case_path')) { show('server_output','กรุณาเลือก Case จากรายการ หรือกด “Open Case…” เพื่อยืนยันโฟลเดอร์ที่จะส่ง','error');toast('ต้องเลือกและยืนยัน Case ก่อนส่ง Server','error');return; }
+    setBusy(true,'กำลังส่ง Case ด้วย rsync และเริ่ม Docker…');
+    try { const data=await api('/api/server/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())}); el('server_case_name').value=data.case_name;el('remote_root').value=data.remote_root;rememberServerSettings();show('server_output',`${data.message}\nCPU ที่เลือก: ${data.cores} thread${data.core_mode==='auto'?' (Auto)':''}\nCase: ${data.remote_case}\nSystemd unit: ${data.unit}`,'ok');toast('ส่งงานและเริ่มคำนวณบน Server สำเร็จ','ok',6000);startServerPolling(); }
+    catch(error) { show('server_output','ส่งงานไม่สำเร็จ: '+error.message,'error');toast('ส่งงานไม่สำเร็จ\n'+error.message,'error',9000); } finally { setBusy(false); }
+  }
+  async function serverStatus(silent=false) {
+    try {
+      const data=await api('/api/server/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())}); const s=data.status;
+      const errorStates=['failed','viewer_failed','not_submitted','not_found'],kind=s.state==='complete'?'ok':(errorStates.includes(s.state)?'error':'warning');
+      const stateLabel={not_submitted:'ยังไม่ได้ส่งงาน',not_found:'ไม่พบงาน'}[s.state]||s.state;
+      show('server_output',`สถานะ: ${stateLabel}\n${s.message||''}\nอัปเดต: ${s.updated_utc||'-'}\nHost: ${s.host||'-'} · Core: ${s.cores||0} · RAM limit: ${s.memory_gib_limit||0} GiB${s.container?'\nDocker container งาน: '+s.container+' · Case อยู่ที่ /case':''}${s.failure?'\nสาเหตุ: '+s.failure+(s.exit_code?' (exit '+s.exit_code+')':''):''}${s.last_log?'\nLog ล่าสุด: '+s.last_log:''}${s.systemd&&s.systemd.unit?'\nsystemd: '+s.systemd.unit+' · '+(s.systemd.active_state||'-')+'/'+(s.systemd.sub_state||'-')+(s.systemd.recorded&&s.systemd.recorded.service_result?' · result='+s.systemd.recorded.service_result:''):''}`,kind);
+      if(!silent)toast(`สถานะงาน: ${stateLabel}`,kind);
+      if(['complete','failed','viewer_failed','stopped','not_submitted','not_found'].includes(s.state)&&serverPollTimer) { clearInterval(serverPollTimer);serverPollTimer=null; }
+    statusFailures=0;
+    } catch(error) { statusFailures++; if(!silent||statusFailures===3){show('server_output','อ่านสถานะไม่สำเร็จ'+(silent?` (ล้มเหลวติดต่อกัน ${statusFailures} ครั้ง; ระบบยังลองต่อ)`:'')+': '+error.message,'error');toast('อ่านสถานะไม่สำเร็จ\n'+error.message,'error',7500);} }
+  }
+  function startServerPolling() { if(serverPollTimer) clearInterval(serverPollTimer); serverPollTimer=setInterval(()=>serverStatus(true),10000); }
+  async function fetchServerLogs() {
+    setBusy(true,'กำลังอ่าน Log จาก Server…');
+    try { const data=await api('/api/server/logs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});show('server_output',data.logs||'ไม่พบ Log ในงานนี้',(data.logs||'').includes('ERROR')||(data.logs||'').includes('FATAL')?'error':'warning');toast('อ่าน Log จาก Server สำเร็จ','ok'); }
+    catch(error) { show('server_output','อ่าน Log ไม่สำเร็จ: '+error.message,'error');toast('อ่าน Log ไม่สำเร็จ\n'+error.message,'error',8500); }
+    finally { setBusy(false); }
+  }
+  async function stopServerJob() {
+    if(!confirm('ต้องการหยุดงานคำนวณนี้หรือไม่?')) return; setBusy(true,'กำลังหยุด Docker job…');
+    try { const data=await api('/api/server/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())}); show('server_output',data.message,'warning');toast('ส่งคำสั่งหยุดงานแล้ว','warning'); }
+    catch(error) { show('server_output','หยุดงานไม่สำเร็จ: '+error.message,'error');toast('หยุดงานไม่สำเร็จ\n'+error.message,'error',7500); } finally { setBusy(false); }
+  }
+  async function fetchServerResult() {
+    setBusy(true,'กำลังดึง Web 3D result กลับมายัง Mac…');
+    try { const data=await api('/api/server/fetch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())}); show('server_output',`ดึงผลสำเร็จ\nโฟลเดอร์: ${data.destination}\nเปิดไฟล์: ${data.viewer}`,'ok');toast('ดึงผล 3D กลับมายัง Mac สำเร็จ','ok');
+      if(data.viewer_url){currentResultUrl=data.viewer_url;el('result_viewer').src=data.viewer_url;el('result_viewer').hidden=false;el('open_result_button').disabled=false;showTab('results');}
+    }
+    catch(error) { show('server_output','ดึงผลไม่สำเร็จ: '+error.message,'error');toast('ดึงผลไม่สำเร็จ\n'+error.message,'error',8500); } finally { setBusy(false); }
+  }
+  function formatBytes(bytes) {
+    let value=Number(bytes)||0;const units=['B','KiB','MiB','GiB','TiB'];let i=0;
+    while(value>=1024&&i<units.length-1){value/=1024;i++;}
+    return `${value.toFixed(i?1:0)} ${units[i]}`;
+  }
+  async function refreshServerJobs(notify=true) {
+    setBusy(true,'กำลังอ่านรายการและขนาดงานบน Server…');
+    try {
+      const data=await api('/api/server/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});
+      const select=el('server_job_select'),previous=select.value;select.textContent='';
+      if(!data.jobs.length){const option=document.createElement('option');option.value='';option.textContent='ยังไม่มีงาน';select.appendChild(option);}
+      data.jobs.forEach(job=>{const option=document.createElement('option');option.value=job.name;option.textContent=`${job.name} · ${job.state} · ${formatBytes(job.size_bytes)}`;option.dataset.result=job.has_web_result?'1':'0';select.appendChild(option);});
+      if([...select.options].some(option=>option.value===previous))select.value=previous;
+      el('server_disk_summary').textContent=`พื้นที่ว่าง ${formatBytes(data.disk_free_bytes)} จาก ${formatBytes(data.disk_total_bytes)} · พบ ${data.jobs.length} งาน`;
+      const lines=data.jobs.map(job=>`${job.active?'🔄':(job.has_web_result?'✓':'•')} ${job.name}\n   ${job.state} · ${formatBytes(job.size_bytes)} · ${job.updated}${job.message?'\n   '+job.message:''}`);
+      show('jobs_output',lines.join('\n\n')||'ยังไม่มีงานในโฟลเดอร์ Server','ok');
+      if(notify)toast(`อ่านรายการงานสำเร็จ · พบ ${data.jobs.length} งาน`,'ok');
+    } catch(error){show('jobs_output','อ่านรายการงานไม่สำเร็จ: '+error.message,'error');if(notify)toast('อ่านรายการงานไม่สำเร็จ\n'+error.message,'error',8000);} finally {setBusy(false);}
+  }
+  function useSelectedServerJob() {
+    const name=value('server_job_select');if(!name){show('jobs_output','กรุณาเลือกงาน','error');return false;}
+    el('server_case_name').value=name;rememberServerSettings();show('jobs_output',`เลือกงาน ${name} แล้ว ใช้ปุ่มดูสถานะหรือดึงผลได้`,'ok');return true;
+  }
+  async function fetchSelectedServerResult(){if(useSelectedServerJob())await fetchServerResult();}
+  async function deleteSelectedServerJob() {
+    const name=value('server_job_select');if(!name){show('jobs_output','กรุณาเลือกงาน','error');return;}
+    if(!confirm(`ลบงาน “${name}” ออกจาก Server แบบถาวรหรือไม่?\nควรดึงผลกลับ Mac ก่อนลบ`))return;
+    setBusy(true,`กำลังลบ ${name}…`);
+    try {const payload=serverCollect();payload.cleanup_case_name=name;const data=await api('/api/server/delete-job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});show('jobs_output',`ลบ ${data.deleted} แล้ว`,'warning');toast(`ลบงาน ${data.deleted} แล้ว`,'warning');await refreshServerJobs(false);}
+    catch(error){show('jobs_output','ลบงานไม่สำเร็จ: '+error.message,'error');toast('ลบงานไม่สำเร็จ\n'+error.message,'error',8000);}finally{setBusy(false);}
+  }
+  async function cleanupOldServerJobs() {
+    const days=Math.max(1,Number(value('cleanup_days'))||30);
+    if(!confirm(`ลบเฉพาะงานที่จบ/ล้มเหลว/หยุด และเก่ากว่า ${days} วันหรือไม่?\nงานที่กำลังทำจะไม่ถูกลบ`))return;
+    setBusy(true,'กำลังล้างงานเก่าบน Server…');
+    try {const payload=serverCollect();payload.cleanup_days=days;const data=await api('/api/server/cleanup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});show('jobs_output',data.deleted.length?`ลบ ${data.deleted.length} งาน:\n${data.deleted.join('\n')}`:`ไม่มีงานที่เข้าเงื่อนไขเก่ากว่า ${days} วัน`,'warning');toast(data.deleted.length?`ล้างงานเก่าสำเร็จ · ลบ ${data.deleted.length} งาน`:`ไม่มีงานเก่าที่ต้องลบ`,'warning');await refreshServerJobs(false);}
+    catch(error){show('jobs_output','ล้างงานเก่าไม่สำเร็จ: '+error.message,'error');toast('ล้างงานเก่าไม่สำเร็จ\n'+error.message,'error',8000);}finally{setBusy(false);}
+  }
+  function openResultWindow(){if(currentResultUrl)window.open(currentResultUrl,'_blank','noopener');}
+  fetch('/api/defaults').then(r=>r.json()).then(d=>{
+    el('stl_path').value=d.stl_path;recommendedOutput=d.recommended_output||d.output||'';latestLocalCase=d.latest_case||'';
+    el('ssh_key').value=d.ssh_key; el('fetch_output').value=d.fetch_output;
+    el('output_hint').textContent=`ตำแหน่งแนะนำ: ${recommendedOutput} · ต้องกดเลือกเพื่อยืนยัน`;
+    if(latestLocalCase)el('latest_case_hint').textContent=`แนะนำล่าสุด: ${latestLocalCase} · กรุณาเลือกเพื่อยืนยันก่อนส่ง`;
+    if(d.recommended_docker_image) el('docker_image').value=d.recommended_docker_image;
+    (d.local_docker_images||[]).forEach(addDockerImageOption);
+    restoreServerSettings();
+    refreshLocalCases(false,recommendedOutput);
+    showActiveModel(d.stl_path.split('/').pop(),false);
+    refreshPreview();
+  });
+  rememberedServerFields.forEach(id=>el(id).addEventListener('change',rememberServerSettings));
+  ['server_host','server_user','server_port','ssh_key'].forEach(id=>el(id).addEventListener('change',()=>{
+    connectionStatus('server_connection_status','','รอทดสอบใหม่');connectionStatus('docker_connection_status','','รอเชื่อม Server');connectionStatus('full_connection_status','','รอทดสอบใหม่');
+  }));
+  ['server_container','docker_image','ready_docker_image','docker_platform'].forEach(id=>el(id).addEventListener('change',()=>{
+    connectionStatus('docker_connection_status','','รอทดสอบใหม่');connectionStatus('full_connection_status','','รอทดสอบใหม่');
+  }));
+  ['remote_root','server_core_mode','server_cores','server_memory'].forEach(id=>el(id).addEventListener('change',()=>connectionStatus('full_connection_status','','รอทดสอบใหม่')));
+  el('server_user').addEventListener('change',()=>{if(!value('remote_root')||value('remote_root')==='/home/openfoam/BlastUrbanJobs')el('remote_root').value=`/home/${value('server_user')}/BlastUrbanJobs`;rememberServerSettings();});
+  ['mass','density','target_cell','charge_level'].forEach(id=>el(id).addEventListener('input',updateCharge));
+  ['xmin','ymin','zmin','xmax','ymax','zmax','nx','ny','nz','charge_x','charge_y','charge_z','probes'].forEach(id=>el(id).addEventListener('input',drawPreview));
+  ['preview_style','show_grid','show_domain','show_source','show_probes'].forEach(id=>el(id).addEventListener('change',drawPreview));
+  el('scale').addEventListener('input',schedulePreviewReload); el('stl_path').addEventListener('change',schedulePreviewReload); el('stl_file').addEventListener('change',importSelectedModel);
+  const canvas=el('model_preview');
+  canvas.addEventListener('pointerdown',event=>{preview.drag=true;preview.lastX=event.clientX;preview.lastY=event.clientY;canvas.classList.add('dragging');canvas.setPointerCapture(event.pointerId);});
+  canvas.addEventListener('pointermove',event=>{if(!preview.drag)return;preview.yaw+=(event.clientX-preview.lastX)*.009;preview.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,preview.pitch+(event.clientY-preview.lastY)*.009));preview.lastX=event.clientX;preview.lastY=event.clientY;drawPreview();});
+  canvas.addEventListener('pointerup',event=>{preview.drag=false;canvas.classList.remove('dragging');canvas.releasePointerCapture(event.pointerId);});
+  canvas.addEventListener('pointercancel',()=>{preview.drag=false;canvas.classList.remove('dragging');});
+  canvas.addEventListener('wheel',event=>{event.preventDefault();preview.zoom=Math.max(.25,Math.min(8,preview.zoom*Math.exp(-event.deltaY*.001)));drawPreview();},{passive:false});
+  new ResizeObserver(drawPreview).observe(canvas); updateCharge();
 </script>
 </body>
 </html>

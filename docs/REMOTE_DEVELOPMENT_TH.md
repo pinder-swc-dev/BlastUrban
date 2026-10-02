@@ -68,6 +68,50 @@ tools/remote-dev build
 
 ## 4. รัน case บน Server
 
+Browser UI สามารถจัดการ workflow นี้ทั้งหมดได้ในขั้นตอนที่ 6: ติดตั้ง SSH key
+ครั้งแรก, ตรวจ Server/Docker, ส่งเคสด้วย rsync, เริ่ม transient systemd user
+service, ดูสถานะ, หยุดงาน และดึง `results-web` กลับมา Password ไม่ถูกเก็บใน
+configuration; หลัง bootstrap ทุกคำสั่งบังคับใช้ key authentication
+
+สำหรับ Docker ที่สร้างไว้แล้ว ไม่ควรเลือก container ที่กำลังรัน ระบบใช้ image
+นั้นสร้าง container ชั่วคราวแยกต่องานพร้อม `--cpus`, `--memory` และ
+`--memory-reservation` หาก image ยังไม่มี Python VTK ให้สร้าง image ต่อด้วย
+`tools/blast_case_ui/Dockerfile.server-web` ตามคู่มือของ UI
+ถ้า image อยู่บน Mac ให้กด **ส่ง Docker image จาก Mac** ในหน้าเดียวกันเพื่อ stream
+`docker save` ผ่าน SSH ไปยัง `docker load` บน Server ไม่ต้องใช้ Git ส่ง image และ
+ไม่ต้องสร้าง registry ภายในวง LAN
+
+เคสที่สร้างจาก Browser UI มี `server-run-auto.sh` สำหรับงานเต็ม ตัวสคริปต์จะส่ง
+เข้า Slurm อัตโนมัติเมื่อพบ `sbatch`; ถ้าเป็น Server เดี่ยวจะรอจน CPU/RAM ว่างพอ
+ล็อกไม่ให้เคสเดียวกันรันซ้ำ ใช้ low priority และเลือก Core ไม่เกินค่าที่กำหนดใน
+`server-job.env`:
+
+```bash
+tools/remote-dev run-auto \
+  tutorials/blastFoam/building3DWorkshop/generatedCases/urbanBlast3D
+
+tools/remote-dev job-status \
+  tutorials/blastFoam/building3DWorkshop/generatedCases/urbanBlast3D
+```
+
+หลังคำนวณสำเร็จ Server จะสร้าง Web viewer และสามารถดึงเฉพาะผลขนาดเล็กกลับมา:
+
+```bash
+tools/remote-dev fetch-web \
+  tutorials/blastFoam/building3DWorkshop/generatedCases/urbanBlast3D \
+  ./server-results/urbanBlast3D
+open ./server-results/urbanBlast3D/blast3D.html
+```
+
+Viewer เลือก Overpressure, Peak Overpressure และ Temperature ตามเวลาได้ พร้อม
+โหมด `Surface`, `Surface with Edges` และซ่อนผิว แยกสำหรับอาคารและคลื่นระเบิด
+
+Git เหมาะกับ source, script, STL และ case input ที่มีขนาดไม่ใหญ่ ใช้
+`tools/remote-dev git-update` เพื่อ `git pull --ff-only` บน Server ได้ แต่ไม่ควรส่ง
+ผล OpenFOAM ดิบ, `processor*`, VTK หรือ HTML ขนาดใหญ่ผ่าน Git ให้ใช้ `fetch-web`
+สำหรับผลดูบน Web หรือ `fetch`/`rsync` สำหรับผลละเอียดแทน วิธีนี้ป้องกัน repository
+โตหลาย GB และไม่กระทบผู้ใช้ Git คนอื่น
+
 รัน foreground เพื่อดู output ตรง ๆ:
 
 ```bash
