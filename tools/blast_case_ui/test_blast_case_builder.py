@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import struct
 import unittest
@@ -11,6 +12,7 @@ from pathlib import Path
 from blast_case_builder import (
     DEFAULT_TEMPLATE,
     CaseConfig,
+    ChargeSource,
     analyse_stl,
     auto_domain,
     create_case,
@@ -192,6 +194,8 @@ class CaseGenerationTests(unittest.TestCase):
             self.assertTrue((target / "server-run-auto.sh").stat().st_mode & 0o111)
             self.assertTrue((target / "server-docker-job.sh").stat().st_mode & 0o111)
             self.assertTrue((target / "makeWebResults.sh").stat().st_mode & 0o111)
+            self.assertTrue((target / "runBlastToVTKIsolated.sh").stat().st_mode & 0o111)
+            self.assertNotIn("runBlastToVTKIsolated.sh", (target / "Allrun").read_text())
             docker_job = (target / "server-docker-job.sh").read_text()
             self.assertIn("set +e", docker_job)
             self.assertIn("/root/OpenFOAM/blastfoam/etc/bashrc", docker_job)
@@ -205,12 +209,91 @@ class CaseGenerationTests(unittest.TestCase):
             self.assertNotIn("paraFoam", preflight)
             self.assertTrue((target / "visualization/exportBlast3D.py").is_file())
             self.assertTrue((target / "visualization/viewer_template.html").is_file())
+            generated_viewer = (target / "visualization/viewer_template.html").read_text()
+            self.assertIn('id="playSpeed"', generated_viewer)
+            self.assertIn("requestAnimationFrame(playbackTick)", generated_viewer)
+            self.assertIn("const MAX_VOXEL_IMAGES = 16", generated_viewer)
             self.assertIn("BLAST_MAX_CORES=10", (target / "server-job.env").read_text())
             self.assertIn("numberOfSubdomains 10", (target / "system/decomposeParDict").read_text())
+            control = (target / "system/controlDict").read_text()
+            self.assertIn("wallSurfaces", control)
+            self.assertIn("blastSurfaces", control)
+            self.assertIn("pressureSlices", control)
+            self.assertIn("point (3 3 1);", control)
+            self.assertIn("maxDeltaT       2e-06;", control)
+            self.assertIn("writeInterval   0.00025;", control)
+            self.assertIn("purgeWrite      2;", control)
+            self.assertEqual(control.count("writeFormat binary;"), 3)
+            dynamic = (target / "constant/dynamicMeshDict").read_text()
+            self.assertIn("dumpLevel       false;", dynamic)
             self.assertIn('file "small_model.stl"', (target / "system/snappyHexMeshDict").read_text())
             self.assertIn("centre (3 3 1)", (target / "system/setFieldsDict").read_text())
+            phase_properties = (target / "constant/phaseProperties").read_text()
+            self.assertIn("(3 3 1)", phase_properties)
+            self.assertIn("generated activation delays", phase_properties)
+            manifest = json.loads((target / "case-builder.json").read_text())
+            self.assertEqual(manifest["config"]["performance_profile"], "fast")
             with self.assertRaises(FileExistsError):
                 create_case(config, root / "out", report, DEFAULT_TEMPLATE, False)
+
+    def test_generates_multiple_discrete_charges_and_detonation_delays(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stl = root / "model.stl"
+            stl.write_text(TETRA_STL, encoding="ascii")
+            report = analyse_stl(stl, run_external=False)
+            config = CaseConfig(
+                case_name="multiSource",
+                stl_path=str(stl),
+                domain_min=(-5, -5, 0),
+                domain_max=(8, 8, 8),
+                divisions=(13, 13, 8),
+                location_in_mesh=(-3, -3, 1),
+                sources=[
+                    ChargeSource((3, 3, 1), 0.1, 0.0),
+                    ChargeSource((5, 5, 1), 0.2, 0.001),
+                ],
+                charge_refinement_level=7,
+                probes=[(4, 3, 1)],
+                snappy_max_cells=100_000,
+                dynamic_max_cells=200_000,
+                mpi_ranks=2,
+            )
+            target, _, _ = create_case(config, root / "out", report, DEFAULT_TEMPLATE, False)
+            fields = (target / "system/setFieldsDict").read_text()
+            phase = (target / "constant/phaseProperties").read_text()
+            manifest = json.loads((target / "case-builder.json").read_text())
+        self.assertEqual(fields.count("sphericalMassToCell"), 2)
+        self.assertIn("centre (3 3 1);", fields)
+        self.assertIn("centre (5 5 1);", fields)
+        self.assertIn("mass 0.1;", fields)
+        self.assertIn("mass 0.2;", fields)
+        self.assertIn("(3 3 1)", phase)
+        self.assertIn("(5 5 1)", phase)
+        self.assertRegex(phase, r"delays\s*\(\s*0\s+0\.001\s*\)")
+        self.assertEqual(len(manifest["config"]["sources"]), 2)
+
+    def test_rejects_overlapping_multiple_charges(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            stl = Path(directory) / "model.stl"
+            stl.write_text(TETRA_STL, encoding="ascii")
+            report = analyse_stl(stl, run_external=False)
+            config = CaseConfig(
+                stl_path=str(stl),
+                domain_min=(-5, -5, 0),
+                domain_max=(8, 8, 8),
+                divisions=(26, 26, 16),
+                location_in_mesh=(-3, -3, 1),
+                sources=[
+                    ChargeSource((3, 3, 1), 10, 0),
+                    ChargeSource((3.05, 3, 1), 10, 0),
+                ],
+                charge_refinement_level=7,
+                snappy_max_cells=100_000,
+                dynamic_max_cells=200_000,
+            )
+            errors, _ = validate_config(config, report)
+        self.assertTrue(any("ซ้อนกัน" in error for error in errors))
 
     def test_viewer_does_not_hard_code_the_iso_pressure(self) -> None:
         viewer = (DEFAULT_TEMPLATE / "visualization/viewer_template.html").read_text(encoding="utf-8")

@@ -8,8 +8,13 @@
 **/.vscode/
 **/__pycache__/
 **/*.pyc
+**/.pytest_cache/
 **/*~
 **/*.swp
+
+# Source-only trees are never part of a generated server case payload.
+/media/
+/validation/
 
 # Compiled output can be rebuilt on the server.
 /bin/

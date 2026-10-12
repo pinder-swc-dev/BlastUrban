@@ -1,6 +1,6 @@
 # BlastUrban 3-D Case Builder
 
-Desktop Python UI สำหรับสร้างเคส `blastFoam` แบบ 3 มิติจาก STL โดยใช้
+Browser Web UI สำหรับสร้างเคส `blastFoam` แบบ 3 มิติจาก STL โดยใช้
 `tutorials/blastFoam/building3DWorkshop` เป็น template และไม่แก้ไข case ต้นฉบับ
 
 ## เปิดโปรแกรม
@@ -14,10 +14,9 @@ python3 tools/blast_case_ui/blast_case_web.py
 หรือดับเบิลคลิก `BlastUrbanUI.command` ที่ root ของโปรเจกต์ ไม่ต้องเปิด path
 `tools/blast_case_ui` เอง
 
-บน macOS ให้ดับเบิลคลิกไฟล์
-`tools/blast_case_ui/Launch_BlastCaseUI.command` ใน Finder ได้เช่นกัน หาก macOS
-บล็อกไฟล์ครั้งแรก ให้คลิกขวา **Open** แล้วกดยืนยัน Launcher จะเปิด Browser UI
-ที่ `http://127.0.0.1:8765` และเก็บ Terminal ไว้สำหรับปิด server ด้วย Control-C
+หาก macOS บล็อก `BlastUrbanUI.command` ครั้งแรก ให้คลิกขวา **Open** แล้วกดยืนยัน
+Launcher จะเปิด Browser UI ที่ `http://127.0.0.1:8765` และเก็บ Terminal ไว้
+สำหรับปิด server ด้วย Control-C
 
 เปิด Browser UI จาก Terminal โดยตรงได้ด้วย:
 
@@ -26,8 +25,7 @@ python3 tools/blast_case_ui/blast_case_web.py
 ```
 
 Browser UI ใช้ Python standard library เท่านั้น ไม่ต้องติดตั้ง NumPy, Flask,
-PySide หรือ Streamlit เพิ่ม สำหรับ Desktop Tk UI บน Ubuntu หากไม่มี Tk ให้ติดตั้ง
-`python3-tk`
+PySide, Tk หรือ Streamlit เพิ่ม
 
 ## ตำแหน่งไฟล์ที่ผู้ใช้ทำงาน
 
@@ -43,10 +41,6 @@ solver แต่ไฟล์ที่ผู้ใช้สร้างถูก�
 
 จึงไม่มี generated case หรือผลคำนวณกระจายใน source tree เปลี่ยนตำแหน่งหลักได้ด้วย
 environment variable `BLASTURBAN_WORKSPACE` ก่อนเปิด UI
-
-```bash
-sudo apt install python3-tk
-```
 
 ## การทำงานบน macOS
 
@@ -66,9 +60,7 @@ python3 tools/blast_case_ui/blast_case_web.py
 
 Apple Command Line Tools Python 3.9 เชื่อมกับ system Tk 8.5 ซึ่งอาจ abort บน
 macOS 26 พร้อมข้อความ `macOS 26 ... required, have instead 16 ...` ดังนั้น
-Launcher จะไม่โหลด Tk บน macOS และใช้ Browser UI โดยอัตโนมัติ ส่วนไฟล์
-`blast_case_ui.py` แบบ Tk ยังคงใช้ได้บน Linux หรือ Python รุ่นที่ติดตั้ง Tk
-8.6/9 ที่เข้ากันได้
+Launcher ใช้ Browser UI โดยไม่โหลด Tk
 
 ## ข้อมูลที่ต้องเตรียมสำหรับ Server
 
@@ -136,6 +128,20 @@ worker เป็น batch container จึงไม่เปิด port: Web UI 
 ของ Server host, systemd เปิด transient container ต่อหนึ่งงาน และผล 3D ถูกดึงกลับ
 ทาง SSH เดิม ไม่ต้องเปิด SSH ใน container หรือ publish Docker daemon
 
+หากเข้าอยู่ใน Ubuntu 22.04 container และ clone repository เรียบร้อยแล้ว ไม่ต้อง
+เรียก Docker ซ้อน ให้ติดตั้งตรงภายใน container ด้วย:
+
+```bash
+cd /path/to/BlastUrban
+tools/blast_case_ui/install-inside-ubuntu2204.sh 16
+source /etc/profile.d/blasturban.sh
+blastFoam -help
+```
+
+สคริปต์ติดตั้ง OpenFOAM 9, Python VTK และ build source ปัจจุบันไว้หลัง path มาตรฐาน
+`/opt/blastfoam` พร้อมคำสั่ง `blasturban-run` สำหรับงาน non-interactive ต้องเรียก
+installer จาก shell ที่เป็น `root`; container แบบ minimal อาจไม่มีคำสั่ง `sudo`
+
 image เช่น `ubuntu:22.04` เพียงอย่างเดียวยังใช้คำนวณไม่ได้ เพราะไม่มี OpenFOAM,
 blastFoam และ Python VTK หากสร้าง `local/blastfoam9:web` ไว้บน Mac แล้ว ให้เลือก
 ชื่อนี้ใน Web UI และกด **ส่ง Docker image จาก Mac** ระบบจะบีบอัดและส่งผ่าน SSH
@@ -170,12 +176,46 @@ Password ใช้ผ่าน PTY ในหน่วยความจำเพ
 
 ระบบสร้าง container ชั่วคราวต่อหนึ่งงาน จึงไม่แก้หรือเข้าไปใช้ container เดิมที่
 กำลังรันอยู่ การจำกัด Core/RAM ใช้ Docker cgroup โดยตรง ส่วน systemd user service
-ทำให้งานทำต่อเมื่อ SSH หรือ Mac ตัดการเชื่อมต่อได้
+ทำให้งานทำต่อเมื่อ SSH หรือ Mac ตัดการเชื่อมต่อได้ **เมื่อ `Linger=yes` เท่านั้น**
+ปุ่มตรวจ Server จะแสดง `Linger` หากเป็น `no`/`unknown` ระบบจะปฏิเสธการส่งโดย
+ค่าเริ่มต้นและแสดงคำสั่งที่ผู้ดูแลต้องรัน เช่น
+`sudo loginctl enable-linger sedswclab01` โปรแกรมจะไม่รัน `sudo` เอง ช่อง
+**ยอมรับความเสี่ยงงานถูกหยุดเมื่อ logout** ใช้สำหรับกรณีจำเป็น และสถานะงานจะ
+บันทึก `accept_no_linger`, `docker_exit_code` และ `oom_killed` ไว้ตรวจสอบ
+
+การเรียกสถานะ/Log/รายการงานซ้ำใช้ OpenSSH ControlMaster เดียวกับ rsync เพื่อลด
+เวลา handshake ปิดกลับเป็นพฤติกรรมเดิมได้ด้วย
+`BLASTURBAN_SSH_MULTIPLEX=0` ส่วน readiness cache ของ image เปิดเป็นค่าเริ่มต้น
+และผูกกับ image ID + platform ไม่ใช่ tag ปิดได้ด้วย
+`BLASTURBAN_IMAGE_READY_CACHE=0`
+
+ก่อนเริ่มงาน ระบบจะอัปเดตเฉพาะ trusted runtime/export assets ในโฟลเดอร์งานบน
+Server ให้ตรงกับ Web UI รุ่นที่กำลังใช้อยู่ และตรวจ SHA-256 ทุกไฟล์ก่อน submit
+เพื่อไม่ให้ Case เก่าพก exporter ที่ล้าสมัยไปทำให้ขั้น Web 3D ล้มเหลว การอัปเดตนี้
+ไม่แก้ `Allrun`, `preflight.sh`, STL, `0/`, `system/`, `constant/` หรือค่า CFD และ
+ไม่เขียนทับ Case ต้นฉบับบน Mac
 
 โหมด CPU **Auto** เป็นค่าเริ่มต้น ระบบอ่านจำนวน thread และ load ของ Ubuntu ตอนส่ง
 งาน กันไว้อย่างน้อย 2 thread แล้วเลือกไม่เกินค่า **CPU สูงสุด** ที่ผู้ใช้กำหนด
 จากนั้นยังใช้ Docker CPU/RAM limit, systemd CPU/IO weight และ `nice` ลดผลกระทบต่อ
 งานอื่นอีกชั้น หากต้องการจำนวนแน่นอนให้เปลี่ยนเป็น **กำหนดเอง**
+
+หลังส่งงาน หน้า Server แสดงขนาดข้อมูล เวลา rsync และความเร็วที่วัดจริง พร้อม
+progress แยกขั้น `queued`, `preparing`, `meshing`, `initializing`, `solving` และ
+`web_result` ระหว่าง `solving` ระบบอ่าน physical `Time` และ `ClockTime` จาก
+`log.blastFoam` เทียบกับ `endTime` เพื่อแสดงเปอร์เซ็นต์และ ETA ค่า ETA เป็นแนวโน้ม
+ระหว่างรันและอาจเปลี่ยนเมื่อ timestep หรือ dynamic refinement เปลี่ยน ก่อนมีข้อมูล
+จาก solver ระบบจะแสดงว่า “ยังประเมินไม่ได้” แทนการสมมติเวลา
+
+หน้าผลลัพธ์จัดประเภทงานเป็น `active`, `finished`, `failed`, `stopped` และ
+`orphan` พร้อมอายุ ขนาด และ systemd unit ปุ่ม **เคลียร์งานค้าง (dry-run)** แสดง
+รายการเท่านั้นและไม่ลบ การลบจริงต้องเลือกงานและยืนยันผ่าน `delete-job` ทีละงาน;
+งานที่ unit ยัง active, path นอก root หรือ symlink จะถูกปฏิเสธ
+
+ของค้างบน Mac ตรวจได้ด้วย `tools/cleanup-workspace.sh` ค่าเริ่มต้นเป็น dry-run
+การย้ายรายการที่ยืนยันไป Trash ต้องใส่ทั้ง `--yes` และ `--item` เช่น
+`tools/cleanup-workspace.sh --yes --item .ui-work-example` ห้ามใช้คำสั่งนี้กับ
+รายการที่ยังไม่ได้ตรวจและยืนยัน
 
 หน้า Web UI เป็น dashboard เต็มหน้าจอ แบ่งเป็น 4 ขั้น: **โมเดลและค่า**,
 **สร้างหลาย Case**, **ส่ง Server**, และ **ผลลัพธ์** บนจอ desktop ตัวหน้าไม่เลื่อนยาว
@@ -192,25 +232,38 @@ Local Case Library จึงสามารถคงพารามิเตอ�
 ล่าสุดเป็นคำแนะนำ แต่ไม่เลือกหรือส่งแทนผู้ใช้ เพื่อป้องกันการส่ง Case ผิดงาน
 
 Tab ผลลัพธ์จะแสดงรายการงาน ขนาด สถานะ และพื้นที่ว่างบน Server ก่อนลบ งานที่เป็น
-`queued`, `running` หรือ `postprocessing` จะถูกล็อกไม่ให้ลบ ปุ่มล้างอัตโนมัติลบ
-เฉพาะงานสถานะจบ/ล้มเหลว/หยุดที่เก่ากว่าจำนวนวันที่กำหนด หลังดึงผลแล้ว viewer
-Air blast 3D จะเปิดในหน้า Web UI โดยเลือก Overpressure, Peak Overpressure,
-Temperature, Surface หรือ Surface with Edges ได้
+`queued`, `running` หรือ `postprocessing` จะถูกล็อกไม่ให้ลบ ปุ่มเคลียร์งานค้างทำ
+dry-run เท่านั้น การลบจริงต้องเลือกและยืนยันทีละงาน หาก container เคยทิ้งไฟล์
+`root:root` endpoint จะซ่อม ownership เฉพาะภายใน job ที่ตรวจสอบ path แล้วก่อนลบ
+หลังดึงผล viewer Air blast 3D จะแสดงอาคาร STL และ pressure iso-surface เป็น
+**surface Box/Voxel** โดยค่าเริ่มต้น รวมถึง overpressure จากผล CFD จริงที่
+resample เป็น Cartesian cell-box บนพื้นและระนาบ X/Y/Z ตามเวลา อาคารอ้างอิง
+STL จริงและ map สีไปยัง wall field ที่ใกล้ที่สุด ส่วนคลื่นอ้างอิง iso-surface
+และ `p - ambient pressure` ของ face จริง ไม่ใช่วงกลม/ควันจำลอง ทั้งหมดเป็น
+ชั้นแสดงผล ไม่ใช่ solver mesh หาก 0.1 m ทำให้มีจำนวนกล่องเกินเพดาน 6,000 กล่อง
+สำหรับอาคารหรือ 2,500 กล่องต่อเฟรมสำหรับคลื่น ระบบจะเพิ่มขนาดกล่องเฉพาะการ
+แสดงผลและแจ้งขนาดจริงใน Viewer
 ปุ่ม **เคลียงาน** ใน Tab Server จะพาไปหน้าจัดการนี้โดยตรง
 
 ## Workflow
 
-1. เลือก Binary หรือ ASCII STL และกำหนด scale
+1. เลือก Binary หรือ ASCII STL และเลือกหน่วยพิกัดของไฟล์
 2. กด **ซ่อมและตั้งค่าทั้งหมดให้ฉัน** เพื่อเชื่อมจุดที่เกือบติดกัน ลบผิวเสีย/ซ้ำ
    และปิดรูขนาดเล็กที่เป็นวงปิดและเกือบแบน Web UI จะนำไฟล์ที่ซ่อมแล้วมาใช้
    แทนทันทีในการตรวจและ Export โดยไม่แก้ไฟล์ต้นฉบับที่อยู่บน Mac
 3. ระบบตรวจโมเดลที่ซ่อมแล้วด้วย internal checker และ OpenFOAM/Docker
    `surfaceCheck` จากนั้นสร้างพื้นที่คำนวณ จำนวนช่อง `locationInMesh` และความละเอียด
    ใกล้อาคารให้อัตโนมัติ
-4. ตรวจ/ปรับค่าในแท็บ Domain และ Mesh
-5. กำหนดตำแหน่ง มวล และ charge refinement ของ C4
-6. กำหนด probes, ระนาบ, simulation time, time step และ write interval
-7. ตรวจ Config และ Export
+4. เลือก **Source 1** แล้วกด **วาง Source บนภาพ** จากการ์ดข้าง Preview จากนั้น
+   คลิกตำแหน่งในมุมมองบน หากมีวัตถุระเบิดหลายจุดให้กด **เพิ่ม** แล้วกำหนด
+   ตำแหน่ง มวล C4 และเวลา delay ของแต่ละ Source
+   ระหว่างเลื่อนเมาส์ UI จะแสดงเส้นกากบาทและพิกัด X/Y จริง หรือจะกรอกพิกัด STL
+   โดยตรงก็ได้ จากนั้นกรอกความสูงเหนือฐานโมเดลและมวล C4 ระบบจะแปลงความสูงเป็น
+   พิกัด Z สัมบูรณ์ที่ OpenFOAM ใช้ และผูก initiation point, charge refinement,
+   cutting planes และ probes กับ Source เดียวกัน
+5. กำหนด simulation time และ CPU; Domain/Mesh, time step, write interval และ
+   ค่าทางเทคนิคอื่นใช้ค่า Auto และยังเปิดแก้ได้ในเมนู Advanced
+6. ตรวจ Config และ Export
 
 เมื่อเลือกไฟล์ หน้า UI จะอัปโหลดและตรวจรูปแบบทันที แล้วแยกข้อความให้ชัดเจนระหว่าง
 “นำเข้าไฟล์ไม่สำเร็จ” กับ “นำเข้าสำเร็จแต่ผิวโมเดลต้องซ่อม” รองรับ Binary STL ที่
@@ -222,6 +275,19 @@ CAD บางโปรแกรมเติม metadata ต่อท้ายไ
 มุมมอง 3D, XY, XZ หรือ YZ ได้ ปุ่ม **ตรวจ Source กับผิวอาคาร** จะอ่าน STL จริงเพื่อ
 ตรวจว่าจุดอยู่ใน solid หรือลูก Source ตัดผิว ไม่ได้ใช้โมเดลย่อใน Preview ตัดสิน
 คุณภาพการคำนวณ โมเดลย่อมีไว้ให้หน้าจอหมุนได้ลื่นเท่านั้น
+
+บนจอ desktop การ์ด Preview จะยืดตามความสูงที่เหลือของหน้าแทนความสูงคงที่ และมี
+การ์ด Source แบบย่ออยู่ข้างภาพ จึงตรวจตำแหน่ง OpenFOAM และสถานะความถูกต้องได้โดย
+ไม่ต้องเลื่อนหน้า ส่วนจอแคบจะกลับเป็น layout แนวตั้งอัตโนมัติ
+
+ค่า X/Y ที่แสดงเป็นพิกัดของ STL หลังใช้ scale แล้ว ส่วนค่าความสูงเป็นระยะจาก
+`minimum Z` ของโมเดล UI จะแสดงพิกัด `(X Y Z)` สุดท้ายในแถบ `OpenFOAM`
+ก่อนตรวจหรือสร้าง Case และจะไม่ใช้ค่า Source ตายตัวจากโมเดลก่อนหน้า
+
+หลาย Source ใช้วัสดุ C4 และความหนาแน่นร่วมกัน แต่แต่ละจุดมี centre, mass และ
+delay ของตัวเอง ระบบสร้าง `sphericalMassToCell` แยกแต่ละลูก และเขียนรายการ
+`points`/`delays` ให้ activation model จริง รองรับสูงสุด 16 จุดและปฏิเสธลูก C4
+ที่ซ้อนกัน, อยู่นอก Domain, ตัดอาคาร หรือมี delay ไม่น้อยกว่า `endTime`
 
 หน้าหลักซ่อน Domain/Mesh, time step, probes และรายละเอียด SSH/Docker ไว้ในเมนู
 ตั้งค่าเพิ่มเติม ค่าทั้งหมดที่เคยมีอยู่ยังแก้ได้ตามเดิม
@@ -236,22 +302,51 @@ UI สร้าง directory ใหม่และจะไม่เขียน
 - เคส OpenFOAM ที่พร้อมสร้าง mesh และรัน
 - สำเนา STL ที่เลือก
 - `case-builder.json` บันทึก input และผลตรวจ STL
+- รายการ `sources` ใน `case-builder.json` พร้อม centre, mass และ delay ของทุกจุด
 - `preflight.sh` ตรวจ environment และ STL บน server
 - `Allrun` สำหรับ surface, mesh, charge, solver และ sampling
 - `SERVER_COMMANDS.md` พร้อมคำสั่งรันและค่าประมาณทรัพยากร
 - `server-run-auto.sh` เลือกจำนวน Core ตามทรัพยากรที่ว่าง ใช้ Slurm อัตโนมัติเมื่อมี
   และเว้น CPU/RAM ให้ระบบอื่นตามค่าใน `server-job.env`
 - `makeWebResults.sh` สร้าง `results-web/blast3D.html` หลังคำนวณสำเร็จ สำหรับดู
-  Overpressure, Peak Overpressure, Temperature และเลือก Surface หรือ
-  Surface with Edges
+  Overpressure, Peak Overpressure, Temperature, pressure slices, STL voxel และ
+  3D overpressure voxel shell โดยยังเลือก Surface/Surface with Edges เพื่อตรวจเทียบได้
 - `<case-name>.tar.gz` สำหรับส่งขึ้น server หากเปิดตัวเลือก archive
 - ผลจาก `surfaceCheck` จะถูกรวมตามรอบไว้ใน
   `diagnostics/surfaceCheck/<run-id>/`; ไฟล์ชิ้นส่วน `.obj` อยู่ในโฟลเดอร์ย่อย
   `connectedParts/` จึงไม่กระจายในโฟลเดอร์งาน
 
-ค่าเริ่มต้นใช้ MPI 10 ranks และจำกัด dynamic mesh ที่ 8 ล้าน cells ซึ่งประเมิน
-RAM แบบ conservative ประมาณ 37 GiB โปรแกรมจะแจ้งเตือนเมื่อค่าที่กำหนดอาจเสี่ยง
-กับ RAM 64 GB หรือสร้างผลลัพธ์จำนวนมาก
+ค่าเริ่มต้น **Balanced Fast** ใช้ MPI ไม่เกินค่าที่ Server จัดสรร, base cell 2 m,
+surface refinement อัตโนมัติ และจำกัด snappy/dynamic mesh ที่ 3 ล้าน cells
+ค่า `maxCo=0.3` และ initial timestep เดิม แต่เพิ่มเพดาน `maxDeltaT` เป็น `2e-6 s`
+เพื่อให้ CFL ควบคุม timestep แทน cap เดิมที่วัดได้ว่าเหลือ `maxCo≈0.022`
+ค่า write interval ถูกผูกกับ `endTime` ให้ประมาณ 48 เฟรม (50 เฟรมสำหรับค่า
+default ของ builder) และ `purgeWrite 2` เก็บ raw restart fields ล่าสุดสองชุด
+ขณะที่ calculated wall/iso/slice series สำหรับ Web animation ยังคงครบ
+pipeline ใหม่เขียนเฉพาะ field ที่แต่ละ surface ต้องใช้และไม่สร้าง VTK ground/wall
+ซ้ำอีกชุด หากต้องการ animation ถี่ขึ้นให้ลด write interval โดยยอมรับพื้นที่ที่เพิ่มขึ้น
+ตัว Web exporter จำกัดไว้ 48 เฟรมและไม่เกิน 500,000 cell-box ต่อหนึ่งระนาบต่อเฟรม
+หาก 0.1 m เกินเพดานจะเพิ่มขนาด cell-box สำหรับระนาบนั้นอัตโนมัติ แทนการทำให้
+Web export ล้มเหลวหรือใช้เวลาสร้างไฟล์ขนาดใหญ่โดยไม่เพิ่มความละเอียดของ CFD
+กริดสีถูกบีบอัดเป็น PNG ตัว Viewer เล่นด้วย `requestAnimationFrame`, preload สองเฟรม
+ข้างหน้า และเก็บภาพที่ decode แล้วแบบมีขอบเขตไม่เกิน 16 ภาพ ผู้ใช้เลือกความเร็ว
+ช้า/ลื่นไหล/เร็วได้ การปรับนี้แสดงเฉพาะเฟรม CFD จริงและไม่สร้างหรือ interpolate
+เฟรมจำลอง ช่วงสี voxel เริ่มต้นคือ −50 ถึง 50 kPa และค่าที่เกินช่วงจะถูก clamp
+เฉพาะสี โดยข้อมูล CFD ดิบไม่ถูกแก้
+
+Full benchmark 100 kg C4, 10 ranks, end time 0.0125 s ใช้ input/source/domain
+เดียวกับ reference: Balanced Fast ลด `blastFoam ClockTime` จาก 37,062 s เหลือ
+3,114 s (11.9 เท่า), ลดขนาด job จาก 32.68 GiB เหลือ 1.21 GiB และลด timestep
+จาก 50,005 เหลือ 6,321 ขณะที่ maximum Courant เท่ากับ 0.0677 ต่ำกว่า limit 0.3
+ผล Web ยังมี 48 เฟรม, STL อาคารเดิม และ cell-box 0.1 m ครบทั้ง 4 ระนาบ
+
+อย่างไรก็ตาม mesh 2 m ไม่ได้ให้ผลเชิงตัวเลขเท่ากับ reference 1.5 m: peak
+overpressure ที่ probes 3 จุดต่าง −24.8%, −26.2% และ −10.8%; final impulse ต่าง
+−10.7%, −4.9% และ +1.0%. ดังนั้น **Balanced Fast ใช้สำหรับ screening และดูแนวคลื่น**
+ส่วนค่าที่นำไปตัดสินทางวิศวกรรมควรใช้ Quality/Custom และทำ mesh-convergence
+
+เลือก profile **Quality** เมื่อต้องเน้นค่า peak โดยใช้ base cell 1.5 m, cap 6/8 ล้าน cells,
+`maxDeltaT=5e-7 s` และ 96 output frames หรือเลือก **Custom** เพื่อแก้ค่าขั้นสูงเอง
 
 ## ข้อควรระวัง
 

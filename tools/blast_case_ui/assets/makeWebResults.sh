@@ -42,7 +42,12 @@ fi
 for file in server-job-status.json case-builder.json geometry-repair.json; do
     [[ ! -f $file ]] || cp "$file" results-web/
 done
-for file in log.blastFoam log.checkMesh* log.snappyHexMesh*; do
+if [[ -f log.blastFoam ]]; then
+    # Keep diagnostics useful without placing a multi-megabyte timestep log in
+    # every downloaded Web package.  The complete log remains in the server job.
+    tail -c 2097152 log.blastFoam > results-web/logs/log.blastFoam.tail
+fi
+for file in log.checkMesh* log.snappyHexMesh*; do
     [[ ! -f $file ]] || cp "$file" results-web/logs/
 done
 

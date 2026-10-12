@@ -29,6 +29,39 @@ positive_int() { [[ $1 =~ ^[1-9][0-9]*$ ]]; }
 safe_value() { [[ $1 =~ ^[A-Za-z0-9_./:@+-]+$ ]]; }
 is_terminal() { [[ $1 == complete || $1 == failed || $1 == viewer_failed || $1 == stopped ]]; }
 
+linger_state() {
+    local value
+    command -v loginctl >/dev/null 2>&1 || { printf 'unknown\n'; return; }
+    value=$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || true)
+    case "$value" in
+        yes|no) printf '%s\n' "$value" ;;
+        *) printf 'unknown\n' ;;
+    esac
+}
+
+short_hash() {
+    python3 - "$1" <<'PY'
+import hashlib, sys
+print(hashlib.sha256(sys.argv[1].encode("utf-8")).hexdigest()[:6])
+PY
+}
+
+# Docker and systemd identifiers share a conservative 63-character ceiling.
+# Keep the collision-resistant hash and unique suffix intact when truncating.
+resource_name() {
+    local original=$1 unique=$2 base slug digest suffix maximum
+    base=$(basename -- "$original")
+    while [[ $base == blasturban-* ]]; do base=${base#blasturban-}; done
+    slug=$(printf '%s' "$base" | tr -cd 'A-Za-z0-9_.-')
+    slug=${slug:-job}
+    digest=$(short_hash "$base")
+    suffix="-${digest}-${unique}"
+    maximum=$((63 - ${#suffix} - 11))
+    (( maximum >= 1 )) || die "resource name suffix is too long"
+    slug=${slug:0:maximum}
+    printf 'blasturban-%s%s\n' "$slug" "$suffix"
+}
+
 current_state() {
     python3 - "$status_file" <<'PY' 2>/dev/null || true
 import json, sys
@@ -40,6 +73,13 @@ except (OSError, ValueError, AttributeError):
 PY
 }
 
+# These globals cross status writes inside one runner process.  write_status
+# also preserves their previous JSON values when called by ExecStopPost.
+job_linger=unknown
+job_accept_no_linger=false
+job_docker_exit_code=""
+job_oom_killed=""
+
 # write_status STATE MESSAGE [CORES] [MEMORY_GIB] [EXIT_CODE] [FAILURE_KIND] [LAST_LOG]
 write_status() {
     local state=$1 message=$2 cores=${3:-0} memory=${4:-0} code=${5:-0}
@@ -47,14 +87,48 @@ write_status() {
     [[ ! -f $container_file ]] || active_container=$(<"$container_file")
     [[ ! -f $unit_file ]] || unit=$(<"$unit_file")
     python3 - "$status_file" "$state" "$message" "$cores" "$memory" "$code" \
-        "$active_container" "$unit" "$failure" "$last_log" <<'PY'
+        "$active_container" "$unit" "$failure" "$last_log" "$job_linger" \
+        "$job_accept_no_linger" "$job_docker_exit_code" "$job_oom_killed" <<'PY'
 import json, os, socket, sys, tempfile
 from datetime import datetime, timezone
-path, state, message, cores, memory, code, container, unit, failure, last_log = sys.argv[1:]
+(
+    path, state, message, cores, memory, code, container, unit, failure, last_log,
+    linger, accept_no_linger, docker_exit_code, oom_killed,
+) = sys.argv[1:]
+previous = {}
+try:
+    with open(path, encoding="utf-8") as stream:
+        previous = json.load(stream)
+except (OSError, ValueError, TypeError):
+    pass
+if not isinstance(previous, dict):
+    previous = {}
+now = datetime.now(timezone.utc)
+now_text = now.isoformat()
+if linger == "unknown" and previous.get("linger") in {"yes", "no", "unknown"}:
+    linger = previous["linger"]
+if accept_no_linger == "false" and previous.get("accept_no_linger") is True:
+    accept_no_linger = "true"
+if not docker_exit_code:
+    docker_exit = previous.get("docker_exit_code")
+else:
+    docker_exit = int(docker_exit_code)
+if not oom_killed:
+    oom = previous.get("oom_killed")
+elif oom_killed in {"true", "false"}:
+    oom = oom_killed == "true"
+else:
+    oom = None
 data = {
     "state": state,
     "message": message,
-    "updated_utc": datetime.now(timezone.utc).isoformat(),
+    "created_utc": previous.get("created_utc") or now_text,
+    "state_started_utc": (
+        previous.get("state_started_utc")
+        if previous.get("state") == state and previous.get("state_started_utc")
+        else now_text
+    ),
+    "updated_utc": now_text,
     "host": socket.gethostname(),
     "pid": os.getpid(),
     "cores": int(cores),
@@ -62,7 +136,13 @@ data = {
     "exit_code": int(code),
     "container": container,
     "unit": unit,
+    "linger": linger,
+    "accept_no_linger": accept_no_linger == "true",
+    "docker_exit_code": docker_exit,
+    "oom_killed": oom,
 }
+if state in {"complete", "failed", "viewer_failed", "stopped"}:
+    data["completed_utc"] = previous.get("completed_utc") or now_text
 if failure:
     data["failure"] = failure
 if last_log:
@@ -92,7 +172,7 @@ remove_job_containers() {
 }
 
 submit_job() {
-    local image=$1 cores=$2 memory=$3 platform=${4:-}
+    local image=$1 cores=$2 memory=$3 platform=${4:-} accept_no_linger=${5:-false}
     safe_value "$image" || die "invalid Docker image name"
     positive_int "$cores" || die "cores must be a positive integer"
     positive_int "$memory" || die "memory must be a positive integer GiB value"
@@ -106,6 +186,13 @@ submit_job() {
     systemctl --user show-environment >/dev/null 2>&1 || {
         die "systemd user service is unavailable; ask admin to run: loginctl enable-linger $(id -un)"
     }
+    [[ $accept_no_linger == true || $accept_no_linger == false ]] \
+        || die "accept_no_linger must be true or false"
+    job_linger=$(linger_state)
+    job_accept_no_linger=$accept_no_linger
+    if [[ $job_linger != yes && $job_accept_no_linger != true ]]; then
+        die "systemd Linger=$job_linger; submission refused because the job may stop after logout. Ask an administrator to run: sudo loginctl enable-linger $(id -un), or explicitly accept the logout risk in the Web UI"
+    fi
     [[ -f $decompose ]] || die "missing system/decomposeParDict"
     if [[ -f $unit_file ]]; then
         local previous_unit
@@ -114,9 +201,8 @@ submit_job() {
             die "this case is already running as $previous_unit"
         fi
     fi
-    local safe_case unit
-    safe_case=$(basename "$case_dir" | tr -cd 'A-Za-z0-9_.-' | cut -c1-32)
-    unit="blasturban-${safe_case}-$(date +%Y%m%d%H%M%S)-$$"
+    local unit
+    unit=$(resource_name "$case_dir" "$(date +%Y%m%d%H%M%S)-$$")
     rm -f "$unit_result_file" "$stop_marker"
     printf '%s\n' "$unit" > "$unit_file"
     write_status queued "submitted to systemd; waiting to start Docker" "$cores" "$memory"
@@ -126,7 +212,8 @@ submit_job() {
         --property=Nice=10 --property=CPUWeight=25 --property=IOWeight=25  \
         --property=TimeoutStopSec=30 \
         --property="ExecStopPost=$case_dir/server-docker-job.sh record-unit-result" \
-        "$case_dir/server-docker-job.sh" execute "$image" "$cores" "$memory" "$platform"; then
+        "$case_dir/server-docker-job.sh" execute "$image" "$cores" "$memory" "$platform" \
+        "$job_linger" "$job_accept_no_linger"; then
         write_status failed "systemd-run could not start the job unit" "$cores" "$memory" 1 submit_failed
         die "systemd-run could not start $unit"
     fi
@@ -159,11 +246,13 @@ final_status() {
 }
 
 execute_job() {
-    local image=$1 cores=$2 memory=$3 platform=${4:-}
+    local image=$1 cores=$2 memory=$3 platform=${4:-} linger=${5:-unknown} accept_no_linger=${6:-false}
     positive_int "$cores" || die "invalid execute request"
     positive_int "$memory" || die "invalid execute request"
     job_cores=$cores
     job_memory=$memory
+    job_linger=$linger
+    job_accept_no_linger=$accept_no_linger
     trap finish_execute EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
@@ -171,10 +260,9 @@ execute_job() {
 
     local memory_high=$((memory > 4 ? memory - 4 : memory))
     local viewer_memory=$((memory < 6 ? memory : 6))
-    local safe_case result_case container host_uid host_gid platform_args=()
-    safe_case=$(basename "$case_dir" | tr -cd 'A-Za-z0-9_.-' | cut -c1-32)
+    local result_case container host_uid host_gid platform_args=()
     result_case=$(basename "$case_dir" | tr -cd 'A-Za-z0-9_.-' | cut -c1-80)
-    container="blasturban-${safe_case}-$$"
+    container=$(resource_name "$case_dir" "$$")
     host_uid=$(id -u)
     host_gid=$(id -g)
     [[ -z $platform ]] || platform_args=(--platform "$platform")
@@ -223,6 +311,8 @@ execute_job() {
         code=$?
     fi
     oom=$(docker inspect --format '{{.State.OOMKilled}}' "$container" 2>/dev/null || printf unknown)
+    job_docker_exit_code=$code
+    job_oom_killed=$oom
     remove_job_containers
     if (( code != 0 )); then
         if [[ -f $stop_marker ]]; then
@@ -238,10 +328,12 @@ execute_job() {
     fi
 
     write_status postprocessing "calculation finished; creating Web 3-D result" "$cores" "$memory"
-    local viewer_container="${container}-web"
+    local viewer_container viewer_cpus
+    viewer_container=$(resource_name "$case_dir" "$$-web")
+    viewer_cpus=$((cores < 2 ? cores : 2))
     docker rm -f "$viewer_container" >/dev/null 2>&1 || true
     printf '%s\n' "$viewer_container" > "$container_file"
-    if docker run --init --name "$viewer_container" ${platform_args[@]+"${platform_args[@]}"} --cpus 1 --memory "${viewer_memory}g" \
+    if docker run --init --name "$viewer_container" ${platform_args[@]+"${platform_args[@]}"} --cpus "$viewer_cpus" --memory "${viewer_memory}g" \
         --user 0:0 --env HOME=/root --env BLAST_CASE_NAME="$result_case" \
         --env BLAST_HOST_UID="$host_uid" --env BLAST_HOST_GID="$host_gid" \
         --volume "$case_dir:/case" --workdir /case --entrypoint /bin/bash \
@@ -254,6 +346,9 @@ execute_job() {
     else
         code=$?
     fi
+    oom=$(docker inspect --format '{{.State.OOMKilled}}' "$viewer_container" 2>/dev/null || printf unknown)
+    job_docker_exit_code=$code
+    job_oom_killed=$oom
     remove_job_containers
     if (( code != 0 )); then
         if [[ -f $stop_marker ]]; then
@@ -272,7 +367,7 @@ execute_job() {
 record_unit_result() {
     local unit=""
     [[ ! -f $unit_file ]] || unit=$(<"$unit_file")
-    python3 - "$unit_result_file" "$unit" "${SERVICE_RESULT:-unknown}" \
+python3 - "$unit_result_file" "$unit" "${SERVICE_RESULT:-unknown}" \
         "${EXIT_CODE:-unknown}" "${EXIT_STATUS:-unknown}" <<'PY'
 import json, os, sys, tempfile
 from datetime import datetime, timezone
@@ -342,7 +437,7 @@ show_status() {
         live=$(systemctl --user show "$unit" --property=LoadState,ActiveState,SubState,Result,ExecMainStatus 2>/dev/null || true)
     fi
     python3 - "$status_file" "$unit_result_file" "$unit" "$live" <<'PY'
-import json, os, sys, tempfile
+import json, os, re, sys, tempfile
 from datetime import datetime, timezone
 
 status_path, result_path, unit, live_text = sys.argv[1:]
@@ -368,6 +463,40 @@ try:
 except (TypeError, ValueError):
     pass
 
+def valid_postprocess_recovery(status_value, recorded_value):
+    recovery = status_value.get("recovery")
+    if not isinstance(recovery, dict):
+        return False
+    if not (
+        recovery.get("method") in {
+            "postprocess_only_adaptive_voxel_export",
+            "postprocess_reused_identical_vtk_export",
+        }
+        and recovery.get("cfd_rerun") is False
+        and recovery.get("postprocess_exit_code") == 0
+        and recovery.get("viewer_verified") is True
+        and recovery.get("archive_sha256_verified") is True
+    ):
+        return False
+    case_dir = os.path.dirname(status_path)
+    viewer = os.path.join(case_dir, "results-web", "blast3D.html")
+    archive_name = recovery.get("archive_name", "")
+    if not isinstance(archive_name, str) or os.path.basename(archive_name) != archive_name:
+        return False
+    archive = os.path.join(case_dir, archive_name)
+    try:
+        if os.path.getsize(viewer) != int(recovery.get("viewer_html_bytes", -1)):
+            return False
+        if os.path.getsize(archive) <= 0:
+            return False
+        recovered_at = datetime.fromisoformat(str(recovery.get("recovered_utc")))
+        recorded_at = datetime.fromisoformat(str(recorded_value.get("recorded_utc")))
+        return recovered_at >= recorded_at
+    except (OSError, TypeError, ValueError):
+        return False
+
+postprocess_recovered = valid_postprocess_recovery(status, recorded)
+
 reconciled = ""
 if unit and state in active_states and not unit_running:
     if recorded:
@@ -375,7 +504,8 @@ if unit and state in active_states and not unit_running:
                       f"{recorded.get('exit_status')}) but status stayed '{state}'")
     elif unit_gone and age > 60:
         reconciled = f"systemd unit {unit} is no longer running but status stayed '{state}'"
-elif unit and state == "complete" and recorded and recorded.get("service_result") != "success":
+elif (unit and state == "complete" and recorded
+      and recorded.get("service_result") != "success" and not postprocess_recovered):
     reconciled = (f"status said complete but systemd reported {recorded.get('service_result')} "
                   f"(exit {recorded.get('exit_status')})")
 
@@ -393,6 +523,74 @@ if reconciled:
         stream.write("\n")
     os.replace(temporary, status_path)
 
+case_dir = os.path.dirname(status_path)
+now = datetime.now(timezone.utc)
+
+def seconds_since(value, until=None):
+    if not value:
+        return None
+    try:
+        start = datetime.fromisoformat(str(value))
+        end = datetime.fromisoformat(str(until)) if until else now
+        return max(0.0, (end - start).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+elapsed = seconds_since(status.get("created_utc"), status.get("completed_utc"))
+stage = {
+    "queued": "queued",
+    "postprocessing": "web_result",
+    "complete": "complete",
+    "failed": "failed",
+    "viewer_failed": "web_result_failed",
+    "stopped": "stopped",
+}.get(str(status.get("state")), "preparing")
+
+blast_log = os.path.join(case_dir, "log.blastFoam")
+if status.get("state") == "running":
+    if os.path.isfile(blast_log):
+        stage = "solving"
+    elif os.path.isfile(os.path.join(case_dir, "log.setRefinedFields")):
+        stage = "initializing"
+    elif os.path.isfile(os.path.join(case_dir, "log.snappyHexMesh")):
+        stage = "meshing"
+
+progress = {"stage": stage, "elapsed_seconds": elapsed}
+if stage == "complete":
+    progress.update({"fraction": 1.0, "eta_seconds": 0.0, "confidence": "actual"})
+elif stage == "solving":
+    control_path = os.path.join(case_dir, "system", "controlDict")
+    try:
+        with open(control_path, encoding="utf-8", errors="replace") as stream:
+            control_text = stream.read()
+        match = re.search(r"(?m)^\s*endTime\s+([0-9.eE+-]+)\s*;", control_text)
+        end_time = float(match.group(1)) if match else None
+    except (OSError, TypeError, ValueError):
+        end_time = None
+    try:
+        with open(blast_log, "rb") as stream:
+            stream.seek(max(0, os.path.getsize(blast_log) - 4 * 1024 * 1024))
+            log_text = stream.read().decode("utf-8", errors="replace")
+        times = re.findall(r"(?m)^Time\s*=\s*([0-9.eE+-]+)\s*$", log_text)
+        clocks = re.findall(r"ClockTime\s*=\s*([0-9.eE+-]+)\s*s", log_text)
+        physical_time = float(times[-1]) if times else None
+        solver_clock = float(clocks[-1]) if clocks else None
+    except (OSError, TypeError, ValueError):
+        physical_time = solver_clock = None
+    progress.update({
+        "physical_time": physical_time,
+        "end_time": end_time,
+        "solver_clock_seconds": solver_clock,
+    })
+    if end_time and end_time > 0 and physical_time is not None:
+        fraction = max(0.0, min(0.999, physical_time / end_time))
+        progress["fraction"] = fraction
+        if solver_clock and physical_time > 0:
+            progress["eta_seconds"] = max(0.0, solver_clock * (end_time / physical_time - 1.0))
+            progress["confidence"] = "medium" if fraction >= 0.2 else "low"
+
+status["progress"] = progress
+
 status["systemd"] = {
     "unit": unit,
     "load_state": live.get("LoadState", ""),
@@ -408,12 +606,19 @@ PY
 
 case ${1:-} in
     submit)
-        [[ $# -ge 4 ]] || die "usage: $0 submit IMAGE CORES MEMORY_GIB [PLATFORM]"
-        submit_job "$2" "$3" "$4" "${5:-}"
+        [[ $# -ge 4 ]] || die "usage: $0 submit IMAGE CORES MEMORY_GIB [PLATFORM] [ACCEPT_NO_LINGER]"
+        submit_job "$2" "$3" "$4" "${5:-}" "${6:-false}"
         ;;
     execute)
         [[ $# -ge 4 ]] || die "invalid execute request"
-        execute_job "$2" "$3" "$4" "${5:-}"
+        execute_job "$2" "$3" "$4" "${5:-}" "${6:-unknown}" "${7:-false}"
+        ;;
+    check-linger)
+        linger_state
+        ;;
+    resource-name)
+        [[ $# -eq 3 ]] || die "usage: $0 resource-name CASE_NAME UNIQUE_SUFFIX"
+        resource_name "$2" "$3"
         ;;
     record-unit-result)
         record_unit_result

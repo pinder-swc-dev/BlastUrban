@@ -816,6 +816,18 @@ def auto_charge_level(base_cell: float, mass: float, density: float, cells_acros
     return max(1, min(10, math.ceil(math.log(max(base_cell / target, 1.0), 2))))
 
 
+@dataclass(frozen=True)
+class ChargeSource:
+    """One discrete C4 charge and its detonation time."""
+
+    centre: Vec3
+    mass: float
+    delay: float = 0.0
+
+    def radius(self, density: float) -> float:
+        return charge_radius(self.mass, density)
+
+
 @dataclass
 class CaseConfig:
     case_name: str = "urbanBlast3D"
@@ -827,27 +839,38 @@ class CaseConfig:
     surface_min_level: int = 2
     surface_max_level: int = 3
     feature_level: int = 2
-    snappy_max_cells: int = 6_000_000
-    dynamic_max_cells: int = 8_000_000
+    snappy_max_cells: int = 3_000_000
+    dynamic_max_cells: int = 3_000_000
     dynamic_max_refinement: int = 2
     refine_interval: int = 5
     location_in_mesh: Vec3 = (-10.0, -10.0, 1.0)
     charge_centre: Vec3 = (35.0, 20.0, 1.0)
     charge_mass: float = 10.0
+    # Empty keeps the historical single-source fields authoritative.  New
+    # clients populate this list and the first entry is mirrored into the
+    # legacy fields at the adapter boundary.
+    sources: List[ChargeSource] = field(default_factory=list)
     explosive_density: float = 1601.0
     charge_refinement_level: int = 6
     probes: List[Vec3] = field(default_factory=lambda: [(35.0, 15.0, 1.0), (40.0, 20.0, 1.0)])
     plane_point: Vec3 = (35.0, 20.0, 1.0)
     end_time: float = 0.0125
     initial_delta_t: float = 5e-8
-    max_delta_t: float = 2.5e-7
+    # The previous 2.5e-7 cap held a measured full case at maxCo ~= 0.022,
+    # far below maxCo=0.3, and forced about 50k solver steps.  Keep the small
+    # initial step but let CFL control the mature solution with an 8x cap.
+    max_delta_t: float = 2e-6
     max_co: float = 0.3
-    write_interval: float = 2.5e-5
+    # Output cadence only; blastFoam time stepping remains controlled by
+    # deltaT/maxDeltaT/maxCo.  The default produces 50 snapshots in 12.5 ms,
+    # close to the 48 frames retained by the Web viewer.
+    write_interval: float = 2.5e-4
     ambient_pressure: float = 101298.0
     pressure_iso_value: float = 110000.0
     mpi_ranks: int = 10
     output_binary: bool = True
     allow_surface_errors: bool = False
+    performance_profile: str = "fast"
 
     @property
     def domain(self) -> Bounds:
@@ -863,7 +886,17 @@ class CaseConfig:
 
     @property
     def theoretical_charge_radius(self) -> float:
-        return charge_radius(self.charge_mass, self.explosive_density)
+        return self.effective_sources[0].radius(self.explosive_density)
+
+    @property
+    def effective_sources(self) -> List[ChargeSource]:
+        if self.sources:
+            return list(self.sources)
+        return [ChargeSource(self.charge_centre, self.charge_mass, 0.0)]
+
+    @property
+    def total_charge_mass(self) -> float:
+        return sum(source.mass for source in self.effective_sources)
 
     def estimate(self) -> Dict[str, float]:
         frames = math.floor(self.end_time / self.write_interval + 1e-12)
@@ -977,27 +1010,56 @@ def validate_config(config: CaseConfig, report: Optional[StlReport] = None, insp
         errors.append("dynamic maxCells ต้องมากกว่าจำนวน base cells")
     if config.mpi_ranks < 1:
         errors.append("MPI ranks ต้องไม่น้อยกว่า 1")
+    if config.performance_profile not in {"fast", "quality", "custom"}:
+        errors.append("performance profile ต้องเป็น fast, quality หรือ custom")
     if not config.domain.contains(config.location_in_mesh):
         errors.append("locationInMesh อยู่นอก domain")
-    radius = 0.0
-    try:
-        radius = config.theoretical_charge_radius
-    except ValueError as exc:
-        errors.append(str(exc))
-    if radius and not config.domain.contains(config.charge_centre, margin=radius):
-        errors.append("ทรงกลมระเบิดตัดหรืออยู่นอกขอบ domain")
-    if radius and config.charge_refinement_level >= 0 and all(value > 0 for value in config.divisions):
-        charge_cell = max(config.actual_cell_size) / (2 ** config.charge_refinement_level)
-        cells_across = 2 * radius / charge_cell
-        if cells_across < 2:
-            errors.append(
-                f"Charge refinement หยาบเกินไป ({cells_across:.2f} cells ต่อเส้นผ่านศูนย์กลาง); "
-                "ต้องมีอย่างน้อย 2 และแนะนำ 5–8 cells"
-            )
-        elif cells_across < 4:
-            warnings.append(
-                f"Charge มีเพียง {cells_across:.2f} cells ต่อเส้นผ่านศูนย์กลาง; แนะนำเพิ่ม charge refinement"
-            )
+    sources = config.effective_sources
+    if not sources:
+        errors.append("ต้องมี Source อย่างน้อย 1 จุด")
+    if len(sources) > 16:
+        errors.append("รองรับ Source ได้ไม่เกิน 16 จุดต่อ Case")
+    radii: List[float] = []
+    charge_cell = (
+        max(config.actual_cell_size) / (2 ** config.charge_refinement_level)
+        if config.charge_refinement_level >= 0 and all(value > 0 for value in config.divisions)
+        else 0.0
+    )
+    for index, source in enumerate(sources, 1):
+        radius = 0.0
+        try:
+            radius = source.radius(config.explosive_density)
+        except ValueError as exc:
+            errors.append(f"Source {index}: {exc}")
+        radii.append(radius)
+        if source.delay < 0:
+            errors.append(f"Source {index}: delay ต้องไม่ติดลบ")
+        elif config.end_time > 0 and source.delay >= config.end_time:
+            errors.append(f"Source {index}: delay ต้องน้อยกว่า endTime")
+        if radius and not config.domain.contains(source.centre, margin=radius):
+            errors.append(f"Source {index}: ทรงกลมระเบิดตัดหรืออยู่นอกขอบ domain")
+        if radius and charge_cell:
+            cells_across = 2 * radius / charge_cell
+            if cells_across < 2:
+                errors.append(
+                    f"Source {index}: Charge refinement หยาบเกินไป "
+                    f"({cells_across:.2f} cells ต่อเส้นผ่านศูนย์กลาง); "
+                    "ต้องมีอย่างน้อย 2 และแนะนำ 5–8 cells"
+                )
+            elif cells_across < 4:
+                warnings.append(
+                    f"Source {index}: Charge มีเพียง {cells_across:.2f} cells "
+                    "ต่อเส้นผ่านศูนย์กลาง; แนะนำเพิ่ม charge refinement"
+                )
+    for left in range(len(sources)):
+        for right in range(left + 1, len(sources)):
+            separation = math.dist(sources[left].centre, sources[right].centre)
+            required = radii[left] + radii[right]
+            if required > 0 and separation < required:
+                errors.append(
+                    f"Source {left + 1} และ Source {right + 1} ซ้อนกัน: "
+                    f"ระยะศูนย์กลาง {separation:.4g} m < รัศมีรวม {required:.4g} m"
+                )
     for index, probe in enumerate(config.probes, 1):
         if not config.domain.contains(probe):
             errors.append(f"Probe {index} อยู่นอก domain: {foam_vec(probe)}")
@@ -1036,13 +1098,15 @@ def validate_config(config: CaseConfig, report: Optional[StlReport] = None, insp
         inside, distance = point_surface_relation(stl, config.stl_scale, config.location_in_mesh)
         if inside:
             errors.append("locationInMesh อยู่ภายใน solid ของ STL")
-        inside, distance = point_surface_relation(stl, config.stl_scale, config.charge_centre)
-        if inside:
-            errors.append("จุดศูนย์กลางระเบิดอยู่ภายใน solid ของ STL")
-        if radius and distance < radius:
-            errors.append(
-                f"ทรงกลมระเบิดตัดผิว STL: ระยะใกล้สุด {distance:.4g} m < รัศมี {radius:.4g} m"
-            )
+        for index, (source, radius) in enumerate(zip(sources, radii), 1):
+            inside, distance = point_surface_relation(stl, config.stl_scale, source.centre)
+            if inside:
+                errors.append(f"Source {index}: จุดศูนย์กลางระเบิดอยู่ภายใน solid ของ STL")
+            if radius and distance < radius:
+                errors.append(
+                    f"Source {index}: ทรงกลมระเบิดตัดผิว STL: "
+                    f"ระยะใกล้สุด {distance:.4g} m < รัศมี {radius:.4g} m"
+                )
     return errors, warnings
 
 
@@ -1176,13 +1240,36 @@ subsetFeatures
 
 
 def _set_fields_dict(config: CaseConfig) -> str:
-    radius = config.theoretical_charge_radius
     dx, dy, dz = config.actual_cell_size
     half_base_diagonal = 0.5 * math.sqrt(dx * dx + dy * dy + dz * dz)
-    # The backup must contain at least one base-cell centre even when the
-    # charge happens to lie on a cell vertex.  It is used only while the true
-    # mass-derived sphere selects no cells during iterative refinement.
-    backup_radius = max(radius * 4, half_base_diagonal * 1.05)
+    regions: List[str] = []
+    for index, source in enumerate(config.effective_sources, 1):
+        radius = source.radius(config.explosive_density)
+        # The backup must contain at least one base-cell centre even when the
+        # charge happens to lie on a cell vertex.  It is used only while the
+        # true mass-derived sphere selects no cells during iterative refinement.
+        backup_radius = max(radius * 4, half_base_diagonal * 1.05)
+        regions.append(
+            f"""    // Source {index}: {foam_number(source.mass)} kg C4, delay {foam_number(source.delay)} s
+    sphericalMassToCell
+    {{
+        centre {foam_vec(source.centre)};
+        radius {foam_number(radius)}; // theoretical radius; mass/rho control the selected volume
+        mass {foam_number(source.mass)};
+        rho {foam_number(config.explosive_density)};
+        backup
+        {{
+            centre {foam_vec(source.centre)};
+            radius {foam_number(backup_radius)};
+        }}
+        refineInternal yes;
+        level {config.charge_refinement_level};
+        fieldValues
+        (
+            volScalarFieldValue alpha.c4 1
+        );
+    }}"""
+        )
     return _foam_header("setFieldsDict", "system") + f"""
 fields (alpha.c4);
 nBufferLayers 2;
@@ -1194,24 +1281,7 @@ defaultFieldValues
 
 regions
 (
-    sphericalMassToCell
-    {{
-        centre {foam_vec(config.charge_centre)};
-        radius {foam_number(radius)}; // theoretical radius; mass/rho control the selected volume
-        mass {foam_number(config.charge_mass)};
-        rho {foam_number(config.explosive_density)};
-        backup
-        {{
-            centre {foam_vec(config.charge_centre)};
-            radius {foam_number(backup_radius)};
-        }}
-        refineInternal yes;
-        level {config.charge_refinement_level};
-        fieldValues
-        (
-            volScalarFieldValue alpha.c4 1
-        );
-    }}
+{chr(10).join(regions)}
 );
 // ************************************************************************* //
 """
@@ -1220,11 +1290,20 @@ regions
 def _phase_properties(config: CaseConfig, template: Path) -> str:
     text = (template / "constant/phaseProperties").read_text(encoding="utf-8")
     text = re.sub(r"(?m)^(\s*rho0\s+)[^;]+;", rf"\g<1>{foam_number(config.explosive_density)};", text)
+    point_lines = "\n".join(f"            {foam_vec(source.centre)}" for source in config.effective_sources)
+    delay_lines = "\n".join(f"            {foam_number(source.delay)}" for source in config.effective_sources)
     text = _replace_once(
         text,
         r"(?m)^\s*points\s+\(\([^;]+;[^\n]*",
-        f"        points     ({foam_vec(config.charge_centre)}); // generated detonation point",
-        "initiation point",
+        "        points\n"
+        "        (\n"
+        f"{point_lines}\n"
+        "        ); // generated detonation points\n"
+        "        delays\n"
+        "        (\n"
+        f"{delay_lines}\n"
+        "        ); // generated activation delays [s]",
+        "initiation points",
     )
     return text
 
@@ -1244,6 +1323,7 @@ deltaT          {foam_number(config.initial_delta_t)};
 writeControl    adjustableRunTime;
 writeInterval   {foam_number(config.write_interval)};
 cycleWrite      0;
+purgeWrite      2;
 writeFormat     {write_format};
 writePrecision  8;
 writeCompression off;
@@ -1275,7 +1355,7 @@ functions
         writeControl writeTime;
         fields (overpressure impulse);
     }}
-    surfaces
+    wallSurfaces
     {{
         type surfaces;
         writeControl adjustableRunTime;
@@ -1283,7 +1363,48 @@ functions
         interpolate false;
         interpolationScheme cellPointFace;
         surfaceFormat vtkTimeSeries;
-        fields (p overpressure overpressureMax T);
+        writeFormat binary;
+        fields (overpressure overpressureMax T);
+        surfaces
+        (
+            walls
+            {{
+                type patch;
+                patches (walls);
+                triangulate false;
+            }}
+        );
+    }}
+    blastSurfaces
+    {{
+        type surfaces;
+        writeControl adjustableRunTime;
+        writeInterval {foam_number(config.write_interval)};
+        interpolate false;
+        interpolationScheme cellPointFace;
+        surfaceFormat vtkTimeSeries;
+        writeFormat binary;
+        fields (p);
+        surfaces
+        (
+            pContours
+            {{
+                type isoSurface;
+                isoField p;
+                isoValues ({foam_number(config.pressure_iso_value)});
+            }}
+        );
+    }}
+    pressureSlices
+    {{
+        type surfaces;
+        writeControl adjustableRunTime;
+        writeInterval {foam_number(config.write_interval)};
+        interpolate true;
+        interpolationScheme cellPointFace;
+        surfaceFormat vtkTimeSeries;
+        writeFormat binary;
+        fields (overpressure);
         surfaces
         (
             ground
@@ -1291,18 +1412,6 @@ functions
                 type patch;
                 patches (ground);
                 triangulate false;
-            }}
-            walls
-            {{
-                type patch;
-                patches (walls);
-                triangulate false;
-            }}
-            pContours
-            {{
-                type isoSurface;
-                isoField p;
-                isoValues ({foam_number(config.pressure_iso_value)});
             }}
             zNormal
             {{
@@ -1365,7 +1474,7 @@ unrefineLevel   0.1;
 nBufferLayers   3;
 maxRefinement   {config.dynamic_max_refinement};
 maxCells        {config.dynamic_max_cells};
-dumpLevel       true;
+dumpLevel       false;
 // ************************************************************************* //
 """
 
@@ -1381,7 +1490,6 @@ roots ();
 
 
 def _allrun(config: CaseConfig, stl_name: str) -> str:
-    dt = foam_number(config.write_interval)
     stl_stem = Path(stl_name).stem
     return f"""#!/bin/sh
 set -eu
@@ -1422,9 +1530,7 @@ runParallel setRefinedFields
 runParallel -s initialised checkMesh -latestTime
 echo "[8/9] Running blastFoam"
 runParallel blastFoam
-echo "[9/9] Sampling results"
-runParallel -s ground blastToVTK ground -dt {dt} -interpolationScheme cubicClamp
-runParallel -s walls blastToVTK walls -dt {dt} -interpolationScheme linearClamp
+echo "[9/9] Calculating probe impulse"
 runApplication calculateImpulse pressureProbes
 echo "Completed: $(pwd)"
 """
@@ -1446,6 +1552,12 @@ done
 def _server_readme(config: CaseConfig, report: StlReport) -> str:
     estimate = config.estimate()
     cell = config.actual_cell_size
+    source_lines = "\n".join(
+        f"  - Source {index}: `{foam_number(source.mass)}` kg at "
+        f"`{foam_vec(source.centre)}` m, delay `{foam_number(source.delay)}` s, "
+        f"radius `{foam_number(source.radius(config.explosive_density))}` m"
+        for index, source in enumerate(config.effective_sources, 1)
+    )
     return f"""# {config.case_name}: server run package
 
 Generated by BlastUrban 3-D Case Builder. The original template was not modified.
@@ -1458,10 +1570,11 @@ Generated by BlastUrban 3-D Case Builder. The original template was not modified
 - Base mesh: `{config.divisions[0]} x {config.divisions[1]} x {config.divisions[2]}` = `{config.base_cells:,}` cells
 - Actual base-cell size: `{foam_vec(cell)}` m
 - Wall refinement: `{config.surface_min_level}-{config.surface_max_level}`
-- Charge: `{foam_number(config.charge_mass)}` kg C4 at `{foam_vec(config.charge_centre)}` m
-- Theoretical charge radius: `{foam_number(config.theoretical_charge_radius)}` m
+- C4 Sources: `{len(config.effective_sources)}`, total mass `{foam_number(config.total_charge_mass)}` kg
+{source_lines}
 - Charge refinement: `{config.charge_refinement_level}`
 - Simulation: `0-{foam_number(config.end_time)}` s, maxCo `{foam_number(config.max_co)}`
+- Performance profile: `{config.performance_profile}`
 - MPI ranks: `{config.mpi_ranks}`
 - Dynamic cell cap: `{config.dynamic_max_cells:,}`
 - Rough RAM at the cap (planning estimate only): `{estimate['ram_gib_at_dynamic_cap']:.1f}` GiB
@@ -1622,7 +1735,12 @@ def create_case(
         organizer = target / "organizeSurfaceCheckOutput.sh"
         shutil.copy2(template / "organizeSurfaceCheckOutput.sh", organizer)
         organizer.chmod(0o755)
-        for script_name in ("server-run-auto.sh", "server-docker-job.sh", "makeWebResults.sh"):
+        for script_name in (
+            "server-run-auto.sh",
+            "server-docker-job.sh",
+            "makeWebResults.sh",
+            "runBlastToVTKIsolated.sh",
+        ):
             script = target / script_name
             shutil.copy2(UI_ASSETS / script_name, script)
             script.chmod(0o755)

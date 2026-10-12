@@ -28,8 +28,9 @@
     .tab-panel.active { display:block; height:100%; }
     .steps { display:grid; height:100%; min-height:0; gap:12px; overflow:hidden; }
     #tab-setup .steps { grid-template-columns:minmax(340px,.72fr) minmax(520px,1.28fr); grid-template-rows:repeat(3,minmax(0,1fr)); }
-    #tab-setup .card:nth-child(2) { grid-column:2; grid-row:1/4; }
+    #tab-setup .card:nth-child(2) { grid-column:2; grid-row:1/4; display:flex; flex-direction:column; }
     #tab-setup .card:not(:nth-child(2)) .grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    #tab-setup .card:not(:nth-child(2)) .source-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
     #tab-setup .card:not(:nth-child(2)) .wide { grid-column:1/-1; }
     #tab-server .steps { grid-template-columns:repeat(3,minmax(285px,1fr)); }
     #tab-server .grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -69,14 +70,23 @@
     details.settings > summary::after { content:'＋'; float:right; color:var(--cyan); }
     details.settings[open] > summary::after { content:'－'; }
     details.settings > .settings-body { padding:11px; border-top:1px solid #17384b; background:#08131f; }
-    .preview-layout { display:grid; height:min(48vh,520px); grid-template-columns:minmax(0,3fr) minmax(205px,1fr); gap:12px; }
-    .preview-wrap { position:relative; min-height:250px; overflow:hidden; border:1px solid #245f79; border-radius:9px; background:radial-gradient(circle at 50% 45%,#123751,#07101b 72%); box-shadow:inset 0 0 35px #0008; }
-    #model_preview { display:block; width:100%; height:100%; min-height:250px; cursor:grab; touch-action:none; }
+    .preview-layout { display:grid; flex:1; height:auto; min-height:330px; grid-template-columns:minmax(0,3fr) minmax(215px,.82fr); gap:12px; }
+    .preview-wrap { position:relative; min-height:330px; overflow:hidden; border:1px solid #245f79; border-radius:9px; background:radial-gradient(circle at 50% 45%,#123751,#07101b 72%); box-shadow:inset 0 0 35px #0008; }
+    #model_preview { display:block; width:100%; height:100%; min-height:330px; cursor:grab; touch-action:none; }
     #model_preview.dragging { cursor:grabbing; }
+    #model_preview.placing-source { cursor:crosshair; box-shadow:inset 0 0 0 2px var(--amber),inset 0 0 35px #0008; }
     .preview-help { position:absolute; left:9px; bottom:8px; padding:4px 7px; border:1px solid #25566d; border-radius:5px; color:#7998a8; background:#06111be8; font-size:9px; pointer-events:none; }
     .preview-side { display:flex; min-height:0; flex-direction:column; gap:8px; overflow:auto; }
     .preview-side select { font-family:inherit; }
     .preview-stats { padding:9px; border:1px solid #19536c; border-radius:7px; background:var(--cyan2); color:#8de8ff; font:10px/1.45 ui-monospace,monospace; white-space:pre-line; }
+    .preview-source { display:grid; gap:6px; padding:9px; border:1px solid #795d20; border-radius:7px; background:#2a220f; }
+    .preview-source strong { color:var(--amber); font-size:10px; letter-spacing:.04em; }
+    .preview-source span { color:#ffe2a0; font:10px/1.4 ui-monospace,monospace; overflow-wrap:anywhere; }
+    .preview-source button { width:100%; padding:6px; }
+    .source-toolbar { display:grid; grid-template-columns:minmax(0,1fr) repeat(3,auto); gap:6px; margin-bottom:8px; }
+    .source-toolbar select,.source-toolbar button { min-height:30px; padding:6px 8px; }
+    .source-toolbar button { min-width:0; }
+    .source-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
     .legend { display:grid; grid-template-columns:repeat(2,1fr); gap:5px; color:#718e9d; font-size:10px; }
     .legend i { display:inline-block; width:9px; height:9px; margin-right:5px; border-radius:2px; vertical-align:-1px; }
     .mini-buttons { display:grid; grid-template-columns:repeat(2,1fr); gap:5px; }
@@ -92,6 +102,13 @@
     .connection-path { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:5px; margin:0 0 10px; color:#668393; font:9px ui-monospace,monospace; }
     .connection-path span { padding:5px 7px; border:1px solid #214659; border-radius:4px; background:#081824; }.connection-path i{color:var(--cyan);font-style:normal}
     .server-summary { margin-top:9px; padding:9px; border:1px solid #17384b; border-radius:6px; color:#8eafbe; background:#06111b; white-space:pre-line; font:10px/1.5 ui-monospace,monospace; }
+    .job-progress { margin-top:9px; padding:10px; border:1px solid #245f79; border-radius:7px; background:#071824; }
+    .job-progress-head { display:flex; justify-content:space-between; gap:8px; color:#bfeeff; font:10px ui-monospace,monospace; }
+    .progress-track { height:9px; margin:8px 0; overflow:hidden; border:1px solid #23546a; border-radius:99px; background:#040d15; }
+    .progress-bar { width:0; height:100%; background:linear-gradient(90deg,#1677ff,var(--cyan)); box-shadow:0 0 10px #36d9ff80; transition:width .35s ease; }
+    .progress-bar.indeterminate { width:35%; animation:progress-scan 1.4s ease-in-out infinite alternate; }
+    .job-progress-time { color:#86a9b9; font:10px/1.45 ui-monospace,monospace; white-space:pre-line; }
+    @keyframes progress-scan { from { transform:translateX(-100%); } to { transform:translateX(285%); } }
     .case-library { margin-top:10px; padding:10px; border:1px solid #1b4a60; border-radius:7px; background:#081a27; }
     .case-library-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px; color:#94b6c5; font-size:11px; }
     .case-library-list { display:grid; gap:5px; max-height:160px; overflow:auto; }
@@ -106,9 +123,9 @@
     #busy { display:none; position:fixed; inset:0; z-index:40; background:#02070dcc; backdrop-filter:blur(4px); place-items:center; color:#dffaff; font:14px ui-monospace,monospace; font-weight:650; }
     #busy.show { display:grid; } .spinner { width:32px; height:32px; margin:0 auto 12px; border:3px solid #36d9ff30; border-top-color:var(--cyan); border-radius:50%; animation:spin .8s linear infinite; box-shadow:0 0 20px #36d9ff40; }
     @keyframes spin { to { transform:rotate(360deg); } }
-    @media (max-width:1180px) { main{grid-template-columns:160px minmax(0,1fr)} #tab-server .steps{grid-template-columns:repeat(2,minmax(280px,1fr));overflow:auto} #tab-server .card:last-child{grid-column:1/-1} #tab-server .steps{grid-auto-rows:max-content;align-content:start} #tab-server .card{overflow:visible} #tab-server .card:last-child>.buttons{position:sticky;bottom:0;z-index:3;margin-inline:-14px;padding:9px 14px;border-top:1px solid #1d4054;background:#09151fee} #tab-setup .steps{grid-template-columns:minmax(300px,.8fr) minmax(440px,1.2fr)} .grid{grid-template-columns:repeat(2,1fr)} .wide{grid-column:1/-1} }
-    @media (max-width:820px) { body{overflow:auto} header{height:58px}.telemetry{display:none} main{display:block;height:auto;padding:8px}.tabs{position:sticky;top:0;z-index:10;display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:8px}.tabs::before,.tab-kicker{display:none}.tabs button{text-align:center;padding:9px 5px}.tab-panel.active{height:auto}.steps,#tab-setup .steps,#tab-server .steps{display:grid;height:auto;grid-template-columns:1fr;grid-template-rows:auto;overflow:visible}#tab-setup .card:nth-child(2),#tab-server .card:last-child{grid-column:auto;grid-row:auto}.card{overflow:visible;margin-bottom:8px}.preview-layout{height:auto;grid-template-columns:1fr}.preview-wrap,#model_preview{height:360px}.result-viewer{height:520px}.grid,.grid.three{grid-template-columns:repeat(2,1fr)} }
-    @media (max-width:520px) { header{padding:8px 12px}.brand-mark{width:34px;height:34px}.brand h1{font-size:14px}.tabs button strong{font-size:10px}.grid,.grid.three{grid-template-columns:1fr}.wide{grid-column:auto}.field-action{grid-template-columns:1fr}.preview-wrap,#model_preview{height:300px} }
+    @media (max-width:1180px) { main{grid-template-columns:160px minmax(0,1fr)} #tab-server .steps{grid-template-columns:repeat(2,minmax(280px,1fr));overflow:auto} #tab-server .card:last-child{grid-column:1/-1} #tab-server .steps{grid-auto-rows:max-content;align-content:start} #tab-server .card{overflow:visible} #tab-server .card:last-child>.buttons{position:sticky;bottom:0;z-index:3;margin-inline:-14px;padding:9px 14px;border-top:1px solid #1d4054;background:#09151fee} #tab-setup .steps{grid-template-columns:minmax(300px,.8fr) minmax(440px,1.2fr)} .grid{grid-template-columns:repeat(2,1fr)} .source-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.wide{grid-column:1/-1} }
+    @media (max-width:820px) { body{overflow:auto} header{height:58px}.telemetry{display:none} main{display:block;height:auto;padding:8px}.tabs{position:sticky;top:0;z-index:10;display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:8px}.tabs::before,.tab-kicker{display:none}.tabs button{text-align:center;padding:9px 5px}.tab-panel.active{height:auto}.steps,#tab-setup .steps,#tab-server .steps{display:grid;height:auto;grid-template-columns:1fr;grid-template-rows:auto;overflow:visible}#tab-setup .card:nth-child(2),#tab-server .card:last-child{grid-column:auto;grid-row:auto;display:block}.card{overflow:visible;margin-bottom:8px}.preview-layout{height:auto;grid-template-columns:1fr}.preview-wrap,#model_preview{height:360px;min-height:360px}.result-viewer{height:520px}.grid,.grid.three,#tab-setup .card:not(:nth-child(2)) .source-grid{grid-template-columns:repeat(2,1fr)} }
+    @media (max-width:520px) { header{padding:8px 12px}.brand-mark{width:34px;height:34px}.brand h1{font-size:14px}.tabs button strong{font-size:10px}.grid,.grid.three,#tab-setup .card:not(:nth-child(2)) .source-grid{grid-template-columns:1fr}.wide{grid-column:auto}.field-action{grid-template-columns:1fr}.source-toolbar{grid-template-columns:1fr auto auto}.source-toolbar .verify{grid-column:1/-1}.preview-wrap,#model_preview{height:300px} }
   </style>
 </head>
 <body>
@@ -128,7 +145,7 @@
       <h2><b>1</b>เลือกโมเดล</h2>
       <div class="grid">
         <label class="wide">ไฟล์อาคาร STL<input id="stl_file" type="file" accept=".stl,model/stl"></label>
-        <label>Scale / หน่วยของไฟล์<input id="scale" type="number" step="any" value="1" list="scale_units"><datalist id="scale_units"><option value="1">เมตร</option><option value="0.01">เซนติเมตร</option><option value="0.001">มิลลิเมตร</option></datalist></label>
+        <label>หน่วยพิกัดในไฟล์<select id="scale"><option value="1">เมตร (m)</option><option value="0.01">เซนติเมตร (cm)</option><option value="0.001">มิลลิเมตร (mm)</option></select></label>
       </div>
       <p id="active_model" class="active-model">โมเดลที่กำลังใช้: ยังไม่ได้เลือกไฟล์</p>
       <div class="buttons">
@@ -142,7 +159,7 @@
           <label class="wide">หรือระบุ path เต็ม<input id="stl_path" type="text"></label>
           <label>พื้นที่ว่างรอบอาคาร (m)<input id="horizontal_buffer" type="number" step="any" value="20"></label>
           <label>พื้นที่ว่างด้านบน (m)<input id="top_buffer" type="number" step="any" value="20"></label>
-          <label>ขนาดช่องพื้นฐาน (m)<input id="target_cell" type="number" step="any" value="1.5"></label>
+          <label>ขนาดช่องพื้นฐาน (m)<input id="target_cell" type="number" step="any" value="2"></label>
           <label>เชื่อมรอยห่างไม่เกิน (m)<input id="weld_tolerance" type="number" step="any" value="0.001"></label>
           <label>ปิดรูไม่เกิน (m)<input id="max_hole_size" type="number" step="any" value="2"></label>
         </div>
@@ -156,7 +173,7 @@
       <div class="preview-layout">
         <div class="preview-wrap">
           <canvas id="model_preview" aria-label="ตัวอย่างโมเดลสามมิติ"></canvas>
-          <div class="preview-help">ลากเพื่อหมุน · เลื่อนล้อเพื่อซูม · Source สีส้มเป็นขนาดคำนวณคร่าว ๆ</div>
+          <div id="preview_help" class="preview-help">ลากเพื่อหมุน · เลื่อนล้อเพื่อซูม · Source สีส้มใช้พิกัดเดียวกับ OpenFOAM</div>
         </div>
         <aside class="preview-side">
           <label>รูปแบบโมเดล<select id="preview_style"><option value="surface-edges">ผิวพร้อมเส้นขอบ</option><option value="surface">ผิวทึบ</option><option value="edges">เส้นขอบ</option></select></label>
@@ -167,6 +184,12 @@
             <button class="secondary" onclick="setPreviewView('yz')">มองข้าง YZ</button>
           </div>
           <button class="secondary" onclick="fitPreview()">จัดภาพให้อยู่ตรงกลาง</button>
+          <div class="preview-source">
+            <strong>SOURCE ที่จะส่งเข้า OpenFOAM</strong>
+            <span id="preview_source_position">ยังไม่ได้เลือก X/Y</span>
+            <span id="preview_source_status">เลือกตำแหน่งบนโมเดลก่อน</span>
+            <button class="success" onclick="beginSourcePlacement()">＋ วาง Source บนภาพ</button>
+          </div>
           <div class="checks">
             <label><input id="show_grid" type="checkbox" checked>กริด XYZ</label>
             <label><input id="show_domain" type="checkbox" checked>ขอบ Domain</label>
@@ -194,8 +217,8 @@
           <label>ความคมของมุม<input id="feature_level" type="number" value="2"></label>
         </div>
         <details><summary>ค่าขั้นสูงของ Mesh</summary><div class="grid" style="margin-top:12px">
-          <label>ช่องสูงสุดตอนสร้างอาคาร<input id="snappy_cells" type="number" value="6000000"></label>
-          <label>ช่องสูงสุดตอนคำนวณ<input id="dynamic_cells" type="number" value="8000000"></label>
+          <label>ช่องสูงสุดตอนสร้างอาคาร<input id="snappy_cells" type="number" value="3000000"></label>
+          <label>ช่องสูงสุดตอนคำนวณ<input id="dynamic_cells" type="number" value="3000000"></label>
           <label>Refine เพิ่มระหว่างคำนวณ<input id="dynamic_levels" type="number" value="2"></label>
           <label>ตรวจ Refine ทุกกี่รอบ<input id="refine_interval" type="number" value="5"></label>
           <label>จุดอากาศ X<input id="location_x" type="number" step="any" value="-10"></label>
@@ -207,16 +230,24 @@
 
     <section class="card">
       <h2><b>3</b>วาง Source ระเบิด</h2>
-      <div class="grid">
-        <label>ตำแหน่ง X (m)<input id="charge_x" type="number" step="any" value="35"></label>
-        <label>ตำแหน่ง Y (m)<input id="charge_y" type="number" step="any" value="20"></label>
-        <label>ความสูง Z (m)<input id="charge_z" type="number" step="any" value="1"></label>
-        <label>มวล C4 (kg)<input id="mass" type="number" step="any" value="10"></label>
+      <div class="source-toolbar">
+        <select id="source_select" aria-label="Source ที่กำลังแก้"><option value="0">Source 1</option></select>
+        <button class="success" type="button" onclick="addSource()">＋ เพิ่ม</button>
+        <button class="danger" type="button" onclick="removeActiveSource()">ลบ</button>
+        <button class="verify" type="button" onclick="checkSourcePosition()">ตรวจทุกจุด</button>
       </div>
-      <div class="status-strip"><span id="source_position_summary">ตำแหน่ง Source</span><span id="source_size_summary">ขนาด Source</span><span id="source_domain_status">กำลังตรวจตำแหน่ง</span></div>
-      <div class="buttons"><button onclick="checkSourcePosition()">ตรวจ Source กับผิวอาคาร</button></div>
-      <p id="charge_summary" class="hint"></p>
+      <div class="grid source-grid">
+        <label>ตำแหน่ง X ตาม STL (m)<input id="charge_x" type="number" step="any" placeholder="เลือกบนโมเดลหรือกรอกค่า" required></label>
+        <label>ตำแหน่ง Y ตาม STL (m)<input id="charge_y" type="number" step="any" placeholder="เลือกบนโมเดลหรือกรอกค่า" required></label>
+        <label>ความสูงเหนือฐานโมเดล (m)<input id="charge_height" type="number" step="any" min="0" value="1" required></label>
+        <input id="charge_z" type="hidden" value="1">
+        <label>มวล C4 (kg)<input id="mass" type="number" step="any" value="10"></label>
+        <label>เริ่มระเบิดหลังเวลา (s)<input id="source_delay" type="number" step="any" min="0" value="0"></label>
+      </div>
+      <span id="source_position_summary" hidden></span><span id="source_size_summary" hidden></span>
+      <div class="status-strip"><span id="source_domain_status">กำลังตรวจตำแหน่ง</span></div>
       <details class="settings"><summary>ความละเอียด Source และระนาบดูผล</summary><div class="settings-body">
+        <p id="charge_summary" class="hint"></p>
         <div class="grid">
           <label>ความหนาแน่น C4 (kg/m³)<input id="density" type="number" step="any" value="1601"></label>
           <label>ความละเอียดรอบ Source<input id="charge_level" type="number" value="6"></label>
@@ -230,22 +261,23 @@
 
     <section class="card">
       <h2><b>4</b>เวลา จุดวัด และค่าคำนวณ</h2>
-      <div class="grid three">
+      <div class="grid">
+        <label>ความเร็ว / คุณภาพ<select id="performance_profile"><option value="fast" selected>Balanced Fast — ดูแนวคลื่นเร็ว</option><option value="quality">Quality — เน้นค่า Peak</option><option value="custom">Custom — ค่าขั้นสูง</option></select></label>
         <label>คำนวณถึงเวลา (s)<input id="end_time" type="number" step="any" value="0.0125"></label>
-        <label>บันทึกผลทุก (s)<input id="write_interval" type="number" step="any" value="2.5e-5"></label>
         <label>CPU สูงสุด<input id="mpi" type="number" value="10"></label>
       </div>
       <details class="settings"><summary>จุดวัดและ Time step เพิ่มเติม</summary><div class="settings-body"><div class="grid">
+        <label>บันทึกผลทุก (s)<input id="write_interval" type="number" step="any" value="0.00025"></label>
         <label class="full">จุดวัด — หนึ่งจุดต่อบรรทัด: x y z<textarea id="probes">35 15 1  # south
 40 20 1  # east
 35 25 1  # near wall</textarea></label>
         <label>ก้าวเวลาเริ่มต้น (s)<input id="delta_t" type="number" step="any" value="5e-8"></label>
-        <label>ก้าวเวลาสูงสุด (s)<input id="max_delta_t" type="number" step="any" value="2.5e-7"></label>
+        <label>ก้าวเวลาสูงสุด (s)<input id="max_delta_t" type="number" step="any" value="2e-6"></label>
         <label>ค่าคุมความเสถียร<input id="max_co" type="number" step="any" value="0.3"></label>
         <label>แรงดันอากาศเริ่มต้น (Pa)<input id="ambient_pressure" type="number" step="any" value="101298"></label>
         <label>แรงดันแนวคลื่น (Pa)<input id="iso_pressure" type="number" step="any" value="110000"></label>
       </div><div class="checks"><label><input id="binary" type="checkbox" checked>บันทึก Field แบบประหยัดพื้นที่</label></div></div></details>
-      <p class="hint">Server จะใช้ CPU ไม่เกินค่านี้ และยังคงเหลือทรัพยากรให้ระบบอื่น</p>
+      <p class="hint">Balanced Fast เหมาะกับ screening และ Web 3D: ใช้ maxCo เดิม แต่ mesh หยาบกว่า reference; benchmark จริงพบค่า peak ที่ probes ต่าง 11–26% จึงควรใช้ Quality/ทำ mesh-convergence เมื่อต้องใช้ค่าทางวิศวกรรม</p>
     </section>
   </div></div>
 
@@ -324,6 +356,13 @@
         <div class="full"><label>Case จาก Mac ที่จะส่ง<span class="required-badge">SELECT</span></label><div class="field-action"><select id="local_case_select" onchange="selectLocalCaseFromLibrary()"><option value="">— ต้องเลือก Case ก่อนส่ง —</option></select><button type="button" onclick="chooseLocalCaseFolder()">Open Case…</button></div><input id="local_case_path" readonly placeholder="ยังไม่ได้เลือก Case"><p id="latest_case_hint" class="hint">ระบบจะแนะนำ Case ล่าสุด แต่จะไม่ส่งจนกว่าคุณจะเลือกยืนยัน</p></div>
         <label class="wide">โฟลเดอร์งานบน Server<input id="remote_root" placeholder="/home/ชื่อผู้ใช้/BlastUrbanJobs"></label>
       </div>
+      <div class="checks"><label><input id="accept_no_linger" type="checkbox">ยอมรับความเสี่ยงงานถูกหยุดเมื่อ logout</label></div>
+      <div id="linger_warning" class="server-summary" hidden></div>
+      <div id="job_progress" class="job-progress" hidden>
+        <div class="job-progress-head"><strong id="job_progress_stage">กำลังเตรียม</strong><span id="job_progress_percent">—</span></div>
+        <div class="progress-track"><div id="job_progress_bar" class="progress-bar indeterminate"></div></div>
+        <div id="job_progress_time" class="job-progress-time">ยังไม่มีข้อมูลเวลา</div>
+      </div>
       <div class="buttons">
         <button onclick="testAllConnections()">ทดสอบทั้งหมด</button>
         <button class="success" onclick="submitServerJob()">ส่งและเริ่มคำนวณ</button>
@@ -351,7 +390,7 @@
         <button onclick="useSelectedServerJob()">เลือกงานนี้</button>
         <button class="success" onclick="fetchSelectedServerResult()">ดึงและแสดงผล 3D</button>
         <button class="danger" onclick="deleteSelectedServerJob()">ลบงานที่เลือก</button>
-        <button class="secondary" onclick="cleanupOldServerJobs()">เคลียงานเก่า</button>
+        <button class="secondary" onclick="cleanupOldServerJobs()">เคลียร์งานค้าง (dry-run)</button>
       </div>
       <div id="server_disk_summary" class="server-summary">ยังไม่ได้อ่านพื้นที่ Server</div>
       <pre id="jobs_output" class="output">ระบบจะไม่ลบงานที่มีสถานะ queued, running หรือ postprocessing</pre>
@@ -367,9 +406,9 @@
     'stl_path','scale','horizontal_buffer','top_buffer','target_cell','weld_tolerance','max_hole_size',
     'xmin','ymin','zmin','xmax','ymax','zmax','nx','ny','nz',
     'surface_min','surface_max','feature_level','snappy_cells','dynamic_cells','dynamic_levels','refine_interval',
-    'location_x','location_y','location_z','charge_x','charge_y','charge_z','mass','density','charge_level',
+    'location_x','location_y','location_z','charge_x','charge_y','charge_z','mass','source_delay','density','charge_level',
     'plane_x','plane_y','plane_z','probes','end_time','delta_t','max_delta_t','max_co','write_interval',
-    'mpi','ambient_pressure','iso_pressure','case_name','output'
+    'mpi','ambient_pressure','iso_pressure','performance_profile','case_name','output'
   ];
   const checks = ['binary','archive','allow_surface_errors'];
   let uploadedFileKey = '';
@@ -385,7 +424,10 @@
   let latestLocalCase = '';
   let localCaseConfirmed = false;
   let localCaseRecords = [];
-  const preview = {triangles:[],bounds:null,total:0,sampled:0,yaw:-0.72,pitch:-0.55,zoom:1,drag:false,lastX:0,lastY:0,sourceCheck:null,error:''};
+  let activeSourceIndex = 0;
+  let blastSources = [{x:null,y:null,height:1,z:1,mass:10,delay:0,check:null}];
+  const preview = {triangles:[],bounds:null,total:0,sampled:0,yaw:-0.72,pitch:-0.55,zoom:1,drag:false,lastX:0,lastY:0,placingSource:false,hoverSource:null,sourceCheck:null,error:''};
+  let autoProbeLayout = true;
   const rememberedServerFields=['server_host','server_port','server_user','ssh_key','remote_root','docker_image','server_container','ready_docker_image','docker_platform','server_core_mode','server_cores','server_memory','fetch_output'];
   const el = id => document.getElementById(id);
   const value = id => el(id).value;
@@ -413,10 +455,18 @@
     out.textContent=(repaired?'✓ กำลังใช้โมเดลที่ซ่อมแล้ว: ':'โมเดลที่กำลังใช้: ')+name;
     out.className='active-model'+(repaired?' repaired':'');
   }
-  function collect() { const data={}; ids.forEach(id=>data[id]=value(id)); checks.forEach(id=>data[id]=el(id).checked); return data; }
+  function collect() {
+    syncSourceAbsoluteZ();storeActiveSource();
+    const data={};ids.forEach(id=>data[id]=value(id));checks.forEach(id=>data[id]=el(id).checked);
+    data.sources=blastSources.map(source=>({centre:[source.x,source.y,source.z],mass:source.mass,delay:source.delay}));
+    data.source_index=activeSourceIndex;
+    const primary=blastSources[0];
+    if(primary){data.charge_x=primary.x;data.charge_y=primary.y;data.charge_z=primary.z;data.mass=primary.mass;}
+    return data;
+  }
   function serverCollect(includePassword=false) {
     const names=['server_host','server_port','server_user','ssh_key','remote_root','docker_image','server_container','ready_docker_image','docker_platform','server_core_mode','server_cores','server_memory','local_case_path','server_case_name','fetch_output'];
-    const data={}; names.forEach(id=>data[id]=value(id)); if(includePassword) data.server_password=value('server_password'); return data;
+    const data={}; names.forEach(id=>data[id]=value(id));data.accept_no_linger=el('accept_no_linger').checked;if(includePassword) data.server_password=value('server_password'); return data;
   }
   function rememberServerSettings() { const saved={};rememberedServerFields.forEach(id=>saved[id]=value(id));localStorage.setItem('blasturban-server',JSON.stringify(saved)); }
   function restoreServerSettings() { try { const saved=JSON.parse(localStorage.getItem('blasturban-server')||'{}');rememberedServerFields.forEach(id=>{if(saved[id]!==undefined)el(id).value=saved[id];}); } catch(_) {} }
@@ -447,7 +497,7 @@
       const option=document.createElement('option');option.value=record.path;option.textContent=`${record.name} · ${new Date(record.updated_epoch*1000).toLocaleString('th-TH')}`;select.appendChild(option);
       const row=document.createElement('div');row.className='case-row';
       const info=document.createElement('span');info.textContent=record.name;
-      const meta=document.createElement('small');const parts=[];if(record.charge_mass!==null&&record.charge_mass!==undefined)parts.push(`${record.charge_mass} kg`);if(record.end_time!==null&&record.end_time!==undefined)parts.push(`${record.end_time} s`);if(record.mpi_ranks)parts.push(`${record.mpi_ranks} MPI`);meta.textContent=parts.join(' · ')||'generated case';info.append(document.createElement('br'),meta);
+      const meta=document.createElement('small');const parts=[];if(record.source_count>1)parts.push(`${record.source_count} Sources`);if(record.charge_mass!==null&&record.charge_mass!==undefined)parts.push(`${record.charge_mass} kg รวม`);if(record.end_time!==null&&record.end_time!==undefined)parts.push(`${record.end_time} s`);if(record.mpi_ranks)parts.push(`${record.mpi_ranks} MPI`);meta.textContent=parts.join(' · ')||'generated case';info.append(document.createElement('br'),meta);
       const use=document.createElement('button');use.type='button';use.className='secondary';use.textContent='เลือกส่ง';use.addEventListener('click',()=>setSelectedLocalCase(record.path));row.append(info,use);review.appendChild(row);
     });
     if(!records.length){const row=document.createElement('div');row.className='case-row';row.textContent='ยังไม่มี Case ในโฟลเดอร์นี้';review.appendChild(row);}
@@ -477,16 +527,115 @@
     el('case_name').value=candidate;show('result_output',`พร้อมสร้าง Case ถัดไป: ${candidate}\nค่าพารามิเตอร์เดิมยังคงอยู่ กรุณาปรับค่าที่ต้องการแล้วตรวจอีกครั้ง`,'warning');toast(`ตั้งชื่อ Case ถัดไปเป็น ${candidate}`,'warning');
   }
   const finiteNumber = (id,fallback=0) => { const n=Number(value(id)); return Number.isFinite(n)?n:fallback; };
+  const enteredNumber = id => { const raw=value(id).trim();if(!raw)return null;const n=Number(raw);return Number.isFinite(n)?n:null; };
   function previewDomain() {
     const minimum=['xmin','ymin','zmin'].map(id=>finiteNumber(id));
     const maximum=['xmax','ymax','zmax'].map((id,i)=>finiteNumber(id,minimum[i]+1));
     return {minimum,maximum,span:maximum.map((n,i)=>Math.max(n-minimum[i],1e-9)),centre:maximum.map((n,i)=>(n+minimum[i])/2)};
   }
-  function chargeRadius() {
-    const mass=finiteNumber('mass'), density=finiteNumber('density');
+  function chargeRadius(source=null) {
+    const mass=source?Number(source.mass):finiteNumber('mass'), density=finiteNumber('density');
     return mass>0&&density>0?Math.cbrt(3*mass/(4*Math.PI*density)):0;
   }
-  function sourceSignature(){return [value('stl_path'),value('scale'),value('charge_x'),value('charge_y'),value('charge_z'),value('mass'),value('density'),value('xmin'),value('ymin'),value('zmin'),value('xmax'),value('ymax'),value('zmax')].join('|');}
+  function modelBaseZ() { return preview.bounds?preview.bounds.minimum[2]:finiteNumber('zmin'); }
+  function sourceCentre() {
+    const x=enteredNumber('charge_x'),y=enteredNumber('charge_y'),z=enteredNumber('charge_z');
+    return x===null||y===null||z===null?null:[x,y,z];
+  }
+  function storeActiveSource(clearCheck=false) {
+    const source=blastSources[activeSourceIndex];if(!source)return;
+    source.x=enteredNumber('charge_x');source.y=enteredNumber('charge_y');source.height=enteredNumber('charge_height');
+    source.z=enteredNumber('charge_z');source.mass=enteredNumber('mass');source.delay=enteredNumber('source_delay');
+    if(clearCheck)source.check=null;
+  }
+  function renderSourceSelector() {
+    const select=el('source_select');select.textContent='';
+    blastSources.forEach((source,index)=>{
+      const option=document.createElement('option');option.value=String(index);
+      const position=source.x===null||source.y===null?'ยังไม่วาง':`X ${Number(source.x).toFixed(2)}, Y ${Number(source.y).toFixed(2)}`;
+      option.textContent=`Source ${index+1} · ${position} · ${source.mass??'?'} kg · delay ${source.delay??'?'} s`;
+      select.appendChild(option);
+    });
+    select.value=String(activeSourceIndex);
+  }
+  function loadActiveSource() {
+    const source=blastSources[activeSourceIndex];if(!source)return;
+    el('charge_x').value=source.x??'';el('charge_y').value=source.y??'';el('charge_height').value=source.height??'';
+    el('charge_z').value=source.z??'';el('mass').value=source.mass??'';el('source_delay').value=source.delay??0;
+    preview.sourceCheck=source.check;renderSourceSelector();updateCharge();drawPreview();
+  }
+  function switchSource(index) {
+    storeActiveSource();activeSourceIndex=Math.max(0,Math.min(Number(index)||0,blastSources.length-1));loadActiveSource();
+  }
+  function addSource() {
+    storeActiveSource();
+    if(blastSources.length>=16){toast('รองรับ Source ได้ไม่เกิน 16 จุดต่อ Case','warning');return;}
+    const height=enteredNumber('charge_height')??1,mass=enteredNumber('mass')??10;
+    blastSources.push({x:null,y:null,height,z:modelBaseZ()+height,mass,delay:0,check:null});
+    activeSourceIndex=blastSources.length-1;preview.sourceCheck=null;loadActiveSource();
+    toast(`เพิ่ม Source ${activeSourceIndex+1} แล้ว · กรุณาวางตำแหน่งบนโมเดล`,'ok');
+  }
+  function removeActiveSource() {
+    if(blastSources.length===1){toast('Case ต้องมี Source อย่างน้อย 1 จุด','warning');return;}
+    const removed=activeSourceIndex+1;blastSources.splice(activeSourceIndex,1);activeSourceIndex=Math.min(activeSourceIndex,blastSources.length-1);
+    preview.sourceCheck=null;loadActiveSource();toast(`ลบ Source ${removed} แล้ว`,'warning');
+  }
+  function syncSourceDependents() {
+    const centre=sourceCentre();if(!centre||activeSourceIndex!==0)return;
+    ['x','y','z'].forEach((axis,index)=>el('plane_'+axis).value=Number(centre[index].toPrecision(12)));
+    if(autoProbeLayout){
+      const domain=previewDomain(),distance=Math.max(.5,Math.min(5,domain.span[0]*.08,domain.span[1]*.08));
+      const clamp=(n,index)=>Math.max(domain.minimum[index]+.01,Math.min(domain.maximum[index]-.01,n));
+      const points=[[centre[0],centre[1]-distance,centre[2]],[centre[0]+distance,centre[1],centre[2]],[centre[0],centre[1]+distance,centre[2]]];
+      el('probes').value=points.map(point=>point.map((n,index)=>Number(clamp(n,index).toFixed(4))).join(' ')).join('\n');
+    }
+  }
+  function syncSourceAbsoluteZ() {
+    const height=enteredNumber('charge_height');
+    if(height===null){el('charge_z').value='';return;}
+    el('charge_z').value=Number((modelBaseZ()+height).toPrecision(12));
+    syncSourceDependents();
+  }
+  function syncAllSourcesAbsoluteZ() {
+    storeActiveSource();
+    blastSources.forEach(source=>{if(source.height!==null&&Number.isFinite(Number(source.height)))source.z=Number((modelBaseZ()+Number(source.height)).toPrecision(12));});
+    const active=blastSources[activeSourceIndex];el('charge_z').value=active&&active.z!==null?active.z:'';syncSourceDependents();
+  }
+  function sourceInputChanged() { syncSourceAbsoluteZ();storeActiveSource(true);preview.sourceCheck=null;renderSourceSelector();drawPreview(); }
+  function beginSourcePlacement() {
+    if(!preview.bounds){toast('กรุณาเลือกและตรวจโมเดลก่อนวาง Source','warning');return;}
+    preview.placingSource=true;preview.hoverSource=null;preview.yaw=0;preview.pitch=0;preview.zoom=1;
+    el('model_preview').classList.add('placing-source');
+    el('preview_help').textContent='โหมดวาง Source: คลิกตำแหน่ง X/Y บนภาพมองบน · กด Esc เพื่อยกเลิก';
+    drawPreview();
+  }
+  function cancelSourcePlacement() {
+    preview.placingSource=false;preview.hoverSource=null;el('model_preview').classList.remove('placing-source');
+    el('preview_help').textContent='ลากเพื่อหมุน · เลื่อนล้อเพื่อซูม · Source สีส้มใช้พิกัดเดียวกับ OpenFOAM';
+  }
+  function sourceXYFromPointer(event) {
+    const canvas=el('model_preview'),rect=canvas.getBoundingClientRect(),domain=previewDomain();
+    const scale=preview.zoom*Math.min(rect.width,rect.height)/(1.75*Math.max(...domain.span,1));
+    const x=domain.centre[0]+(event.clientX-rect.left-rect.width/2)/scale;
+    const y=domain.centre[1]-(event.clientY-rect.top-rect.height/2)/scale;
+    return [Math.max(domain.minimum[0],Math.min(domain.maximum[0],x)),Math.max(domain.minimum[1],Math.min(domain.maximum[1],y))];
+  }
+  function placeSourceFromPointer(event) {
+    const [x,y]=sourceXYFromPointer(event);
+    el('charge_x').value=Number(x.toFixed(4));
+    el('charge_y').value=Number(y.toFixed(4));
+    cancelSourcePlacement();sourceInputChanged();
+    toast(`วาง Source ${activeSourceIndex+1} ที่ X=${value('charge_x')}, Y=${value('charge_y')} m แล้ว`,'ok');
+  }
+  function requireSourcePosition() {
+    syncSourceAbsoluteZ();storeActiveSource();
+    const invalid=blastSources.findIndex(source=>![source.x,source.y,source.z,source.height,source.mass,source.delay].every(value=>value!==null&&Number.isFinite(Number(value)))||Number(source.mass)<=0||Number(source.delay)<0);
+    if(invalid<0)return true;
+    activeSourceIndex=invalid;loadActiveSource();
+    toast(`Source ${invalid+1}: กรุณากำหนด X/Y/ความสูง/มวล/delay ให้ถูกต้อง`,'warning',6500);
+    return false;
+  }
+  function sourceSignature(){storeActiveSource();return JSON.stringify([value('stl_path'),value('scale'),blastSources.map(({x,y,z,mass,delay})=>[x,y,z,mass,delay]),value('density'),value('xmin'),value('ymin'),value('zmin'),value('xmax'),value('ymax'),value('zmax')]);}
   function projectPoint(point,width,height,domain) {
     const x=point[0]-domain.centre[0], y=point[1]-domain.centre[1], z=point[2]-domain.centre[2];
     const cy=Math.cos(preview.yaw),sy=Math.sin(preview.yaw),cp=Math.cos(preview.pitch),sp=Math.sin(preview.pitch);
@@ -503,14 +652,18 @@
     return value('probes').split(/\n/).map(line=>line.split('#')[0].trim().split(/\s+/).slice(0,3).map(Number)).filter(p=>p.length===3&&p.every(Number.isFinite));
   }
   function updatePreviewText() {
-    const domain=previewDomain(),radius=chargeRadius(),centre=['charge_x','charge_y','charge_z'].map(id=>finiteNumber(id)),sourceValid=finiteNumber('mass')>0&&finiteNumber('density')>0;
-    const inside=centre.every((n,i)=>n-radius>=domain.minimum[i]&&n+radius<=domain.maximum[i]);
-    el('source_position_summary').textContent=`Source: (${centre.map(n=>n.toFixed(3)).join(', ')}) m`;
-    el('source_size_summary').textContent=`รัศมี ≈ ${radius.toPrecision(4)} m · Ø ${(2*radius).toPrecision(4)} m`;
-    const status=el('source_domain_status'),checked=preview.sourceCheck&&preview.sourceCheck.signature===sourceSignature()?preview.sourceCheck:null;
-    if(!sourceValid){status.textContent='⚠ มวลและความหนาแน่นต้องมากกว่า 0';status.style.color='var(--red)';status.style.background='var(--redbg)';}
+    const domain=previewDomain(),radius=chargeRadius(),centre=sourceCentre(),active=blastSources[activeSourceIndex],sourceValid=centre&&finiteNumber('mass')>0&&finiteNumber('density')>0&&enteredNumber('charge_height')!==null&&enteredNumber('source_delay')!==null;
+    const inside=centre?centre.every((n,i)=>n-radius>=domain.minimum[i]&&n+radius<=domain.maximum[i]):false;
+    const totalMass=blastSources.reduce((sum,source)=>sum+(Number(source.mass)||0),0);
+    el('source_position_summary').textContent=centre?`Source ${activeSourceIndex+1}: (${centre.map(n=>n.toFixed(3)).join(', ')}) m`:`Source ${activeSourceIndex+1}: กรุณาเลือก X/Y`;
+    el('source_size_summary').textContent=`รัศมี ${radius.toPrecision(4)} m · รวม ${blastSources.length} จุด / ${totalMass.toPrecision(4)} kg`;
+    const status=el('source_domain_status'),checked=active&&active.check&&active.check.signature===sourceSignature()?active.check:null;
+    if(!centre){status.textContent='⚠ ยังไม่ได้กำหนด X/Y ของ Source';status.style.color='var(--amber)';status.style.background='var(--amberbg)';}
+    else if(!sourceValid){status.textContent='⚠ ความสูง มวล และความหนาแน่นต้องเป็นค่าที่ใช้ได้';status.style.color='var(--red)';status.style.background='var(--redbg)';}
     else if(checked){status.textContent=(checked.level==='ok'?'✓ ':'⚠ ')+checked.message;status.style.color=checked.level==='ok'?'var(--green)':(checked.level==='warning'?'var(--amber)':'var(--red)');status.style.background=checked.level==='ok'?'var(--greenbg)':(checked.level==='warning'?'var(--amberbg)':'var(--redbg)');}
     else {status.textContent=inside?'✓ อยู่ภายใน Domain · กดตรวจผิวอาคารเพื่อยืนยัน':'⚠ Source หรือขนาดล้ำออกนอก Domain';status.style.color=inside?'var(--green)':'var(--red)';status.style.background=inside?'var(--greenbg)':'var(--redbg)';}
+    el('preview_source_position').textContent=centre?`S${activeSourceIndex+1} · X ${centre[0].toFixed(3)} · Y ${centre[1].toFixed(3)} · Z ${centre[2].toFixed(3)} m`:`Source ${activeSourceIndex+1} ยังไม่ได้เลือก X/Y`;
+    el('preview_source_status').textContent=status.textContent;
     const modelSpan=preview.bounds?preview.bounds.maximum.map((n,i)=>n-preview.bounds.minimum[i]):[0,0,0];
     const cells=['nx','ny','nz'].map(id=>Math.max(1,finiteNumber(id,1)));
     const cell=domain.span.map((n,i)=>n/cells[i]);
@@ -543,8 +696,13 @@
       projected.forEach(face=>{ctx.beginPath();ctx.moveTo(face.p[0].x,face.p[0].y);ctx.lineTo(face.p[1].x,face.p[1].y);ctx.lineTo(face.p[2].x,face.p[2].y);ctx.closePath();if(style!=='edges'){ctx.fillStyle='rgba(83,177,253,.34)';ctx.fill();}if(style!=='surface'){ctx.strokeStyle=style==='edges'?'rgba(132,202,255,.62)':'rgba(178,221,255,.28)';ctx.lineWidth=.65;ctx.stroke();}});
     }
     if(el('show_probes').checked){parsePreviewProbes().forEach((point,index)=>{const p=projectPoint(point,width,height,domain);ctx.fillStyle='#f97066';ctx.beginPath();ctx.arc(p.x,p.y,3.5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fda29b';ctx.font='11px sans-serif';ctx.fillText(`P${index+1}`,p.x+5,p.y-5);});}
-    if(el('show_source').checked){const centre=['charge_x','charge_y','charge_z'].map(id=>finiteNumber(id)),p=projectPoint(centre,width,height,domain),rp=chargeRadius()*p.scale,visible=Math.max(rp,3);
-      ctx.beginPath();ctx.arc(p.x,p.y,visible,0,Math.PI*2);ctx.fillStyle='rgba(247,144,9,.75)';ctx.fill();ctx.strokeStyle='#fec84b';ctx.lineWidth=2;ctx.stroke();if(rp<7){ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.setLineDash([3,3]);ctx.strokeStyle='#fdb022';ctx.stroke();ctx.setLineDash([]);}ctx.fillStyle='#ffd28a';ctx.font='bold 12px sans-serif';ctx.fillText(`Source Ø ${(2*chargeRadius()).toPrecision(3)} m`,p.x+11,p.y-9);
+    if(el('show_source').checked){blastSources.forEach((source,index)=>{const centre=[source.x,source.y,source.z];if(!centre.every(Number.isFinite))return;const p=projectPoint(centre,width,height,domain),rp=chargeRadius(source)*p.scale,visible=Math.max(rp,3),active=index===activeSourceIndex;
+      drawWorldLine(ctx,[centre[0],centre[1],modelBaseZ()],centre,width,height,domain,active?'#f79009':'#8d5df6',active?1.7:1.1,[4,3]);
+      ctx.beginPath();ctx.arc(p.x,p.y,visible,0,Math.PI*2);ctx.fillStyle=active?'rgba(247,144,9,.78)':'rgba(141,93,246,.62)';ctx.fill();ctx.strokeStyle=active?'#fec84b':'#c3a6ff';ctx.lineWidth=active?2.4:1.6;ctx.stroke();if(rp<7){ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);}ctx.fillStyle=active?'#ffd28a':'#d7c6ff';ctx.font='bold 12px sans-serif';ctx.fillText(`S${index+1} · ${source.mass} kg · ${source.delay}s`,p.x+11,p.y-9);
+    });}
+    if(preview.placingSource&&preview.hoverSource){const [x,y]=preview.hoverSource,z=enteredNumber('charge_z')??modelBaseZ(),p=projectPoint([x,y,z],width,height,domain);
+      ctx.strokeStyle='#ffc857';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(p.x-14,p.y);ctx.lineTo(p.x+14,p.y);ctx.moveTo(p.x,p.y-14);ctx.lineTo(p.x,p.y+14);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='#ffe4a3';ctx.font='bold 11px ui-monospace,monospace';ctx.fillText(`X ${x.toFixed(2)} · Y ${y.toFixed(2)}`,p.x+10,p.y-10);
     }
     updatePreviewText();
   }
@@ -552,11 +710,11 @@
     const request=++previewRequest;
     try { await ensureUpload(); if(request!==previewRequest||!value('stl_path')) return; preview.error='กำลังอ่านโมเดล…';drawPreview();
       const data=await api('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stl_path:value('stl_path'),scale:value('scale')})});
-      if(request!==previewRequest)return;preview.error='';preview.triangles=data.triangles;preview.bounds=data.bounds;preview.total=data.total_triangles;preview.sampled=data.sampled_triangles;fitPreview();
+      if(request!==previewRequest)return;preview.error='';preview.triangles=data.triangles;preview.bounds=data.bounds;preview.total=data.total_triangles;preview.sampled=data.sampled_triangles;syncAllSourcesAbsoluteZ();fitPreview();
     } catch(error){if(request!==previewRequest)return;preview.error='เปิด Preview ไม่สำเร็จ\n'+error.message;drawPreview();}
   }
   function schedulePreviewReload(){clearTimeout(previewReloadTimer);previewReloadTimer=setTimeout(refreshPreview,450);}
-  function setPreviewView(view){if(view==='xy'){preview.yaw=0;preview.pitch=0;}else if(view==='xz'){preview.yaw=0;preview.pitch=-Math.PI/2;}else if(view==='yz'){preview.yaw=-Math.PI/2;preview.pitch=-Math.PI/2;}else{preview.yaw=-.72;preview.pitch=-.55;}preview.zoom=1;drawPreview();}
+  function setPreviewView(view){if(preview.placingSource)cancelSourcePlacement();if(view==='xy'){preview.yaw=0;preview.pitch=0;}else if(view==='xz'){preview.yaw=0;preview.pitch=-Math.PI/2;}else if(view==='yz'){preview.yaw=-Math.PI/2;preview.pitch=-Math.PI/2;}else{preview.yaw=-.72;preview.pitch=-.55;}preview.zoom=1;drawPreview();}
   function fitPreview(){preview.zoom=1;drawPreview();}
   async function ensureUpload() {
     const file=el('stl_file').files[0];
@@ -576,7 +734,7 @@
   async function importSelectedModel() {
     const file=el('stl_file').files[0];if(!file)return;
     const request=++importRequest;
-    uploadedFileKey='';el('stl_path').value='';preview.triangles=[];preview.bounds=null;preview.error='กำลังนำเข้าโมเดล…';drawPreview();
+    uploadedFileKey='';el('stl_path').value='';el('charge_x').value='';el('charge_y').value='';preview.triangles=[];preview.bounds=null;preview.sourceCheck=null;cancelSourcePlacement();preview.error='กำลังนำเข้าโมเดล…';drawPreview();
     const active=el('active_model');active.textContent=`กำลังนำเข้า: ${file.name} (${formatBytes(file.size)})`;active.className='active-model';
     show('surface_output','กำลังคัดลอกและตรวจรูปแบบ STL…','warning');setBusy(true,'กำลังนำเข้าโมเดล STL…');
     try {
@@ -607,7 +765,7 @@
     ['nx','ny','nz'].forEach((id,i)=>el(id).value=a.divisions[i]);
     el('surface_min').value=a.surface_levels[0]; el('surface_max').value=a.surface_levels[1]; el('feature_level').value=a.feature_level;
     ['location_x','location_y','location_z'].forEach((id,i)=>el(id).value=a.location[i]);
-    drawPreview();
+    syncSourceAbsoluteZ();autoCharge();drawPreview();
   }
   async function checkSurface(auto) {
     setBusy(true,auto?'กำลังตรวจและจัดพื้นที่คำนวณ…':'กำลังตรวจโมเดล…');
@@ -632,24 +790,52 @@
     finally { setBusy(false); }
   }
   function autoCharge() {
-    const base=Number(value('target_cell')), mass=Number(value('mass')), rho=Number(value('density'));
-    const radius=Math.cbrt(3*mass/rho/(4*Math.PI)); const target=2*radius/6;
+    storeActiveSource();const base=Number(value('target_cell')),rho=Number(value('density'));
+    const radii=blastSources.map(source=>chargeRadius(source)).filter(radius=>radius>0);if(!(base>0&&rho>0&&radii.length))return;
+    const target=2*Math.min(...radii)/6;
     el('charge_level').value=Math.max(1,Math.min(10,Math.ceil(Math.log2(Math.max(base/target,1))))); updateCharge();
+  }
+  function syncOutputCadence(frameTarget) {
+    const end=Number(value('end_time'));if(!(end>0))return;
+    el('write_interval').value=Number((end/frameTarget).toPrecision(10));
+  }
+  function recalculateMeshForProfile() {
+    const target=Number(value('target_cell')),domain=previewDomain();
+    if(!(target>0))return;
+    ['nx','ny','nz'].forEach((id,index)=>el(id).value=Math.max(1,Math.ceil(domain.span[index]/target)));
+    if(preview.bounds){
+      const span=preview.bounds.maximum.map((n,index)=>n-preview.bounds.minimum[index]);
+      const surfaceTarget=Math.max(.1,Math.min(.5,Math.max(...span)/250));
+      const maximum=Math.max(1,Math.min(8,Math.ceil(Math.log2(Math.max(target/surfaceTarget,1)))));
+      el('surface_min').value=Math.max(1,maximum-1);el('surface_max').value=maximum;el('feature_level').value=Math.max(1,maximum-1);
+    }
+  }
+  function applyPerformanceProfile(recalculate=true) {
+    const profile=value('performance_profile');if(profile==='custom')return;
+    const settings=profile==='quality'
+      ? {cell:1.5,snappy:6000000,dynamic:8000000,maxDelta:5e-7,frames:96}
+      : {cell:2,snappy:3000000,dynamic:3000000,maxDelta:2e-6,frames:48};
+    el('target_cell').value=settings.cell;el('snappy_cells').value=settings.snappy;el('dynamic_cells').value=settings.dynamic;
+    el('dynamic_levels').value=2;el('refine_interval').value=5;el('max_delta_t').value=settings.maxDelta;
+    syncOutputCadence(settings.frames);if(recalculate)recalculateMeshForProfile();autoCharge();drawPreview();
   }
   function planesAtCharge() { ['x','y','z'].forEach(a=>el('plane_'+a).value=value('charge_'+a)); }
   async function checkSourcePosition() {
-    setBusy(true,'กำลังตรวจ Source กับผิวอาคารจริง…');
+    if(!requireSourcePosition())return;
+    setBusy(true,`กำลังตรวจ ${blastSources.length} Sources กับผิวอาคารจริง…`);
     try { await ensureUpload(); const data=await api('/api/source-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
-      preview.sourceCheck={...data,signature:sourceSignature()};drawPreview();toast(data.message,data.level==='ok'?'ok':data.level,5500);
-    } catch(error){preview.sourceCheck={signature:sourceSignature(),level:'error',message:'ตรวจ Source ไม่สำเร็จ: '+error.message};drawPreview();toast('ตรวจ Source ไม่สำเร็จ\n'+error.message,'error',7500);} finally { setBusy(false); }
+      const signature=sourceSignature();(data.sources||[]).forEach((result,index)=>{if(blastSources[index])blastSources[index].check={...result,signature};});preview.sourceCheck=blastSources[activeSourceIndex].check;renderSourceSelector();drawPreview();toast(data.message,data.level==='ok'?'ok':data.level,6500);
+    } catch(error){preview.sourceCheck={signature:sourceSignature(),level:'error',message:'ตรวจ Source ไม่สำเร็จ: '+error.message};blastSources[activeSourceIndex].check=preview.sourceCheck;drawPreview();toast('ตรวจ Source ไม่สำเร็จ\n'+error.message,'error',7500);} finally { setBusy(false); }
   }
   function updateCharge() {
+    syncSourceAbsoluteZ();storeActiveSource();renderSourceSelector();
     const mass=Number(value('mass')),rho=Number(value('density')),base=Number(value('target_cell')),level=Number(value('charge_level'));
-    if(mass>0&&rho>0&&base>0) { const r=Math.cbrt(3*mass/rho/(4*Math.PI)), c=base/(2**level); el('charge_summary').textContent=`รัศมีทฤษฎี ${r.toPrecision(5)} m · cell รอบ Source ≈ ${c.toPrecision(5)} m · ${(2*r/c).toFixed(1)} cells/diameter`; }
+    if(mass>0&&rho>0&&base>0) { const r=Math.cbrt(3*mass/rho/(4*Math.PI)), c=base/(2**level); el('charge_summary').textContent=`Source ${activeSourceIndex+1}: รัศมี ${r.toPrecision(5)} m · cell ≈ ${c.toPrecision(5)} m · ${(2*r/c).toFixed(1)} cells/diameter`; }
     else { el('charge_summary').textContent='กรุณาใส่มวล ความหนาแน่น และขนาดช่องให้มากกว่า 0'; }
     drawPreview();
   }
   async function validateCase() {
+    if(!requireSourcePosition())return false;
     setBusy(true,'กำลังตรวจ Config และตำแหน่งกับผิว STL…');
     try {
       await ensureUpload(); const data=await api('/api/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
@@ -661,6 +847,7 @@
   }
   async function exportCase() {
     if(!value('output')){show('result_output','กรุณากด “เลือกโฟลเดอร์…” และยืนยันตำแหน่งที่จะเก็บ Case ก่อน','error');toast('ต้องเลือกตำแหน่งบันทึก Case ก่อน','error');return;}
+    if(!requireSourcePosition())return;
     setBusy(true,'กำลังตรวจและสร้างชุดไฟล์สำหรับ Server…');
     try {
       await ensureUpload(); const data=await api('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
@@ -701,28 +888,34 @@
     setBusy(true,combined?'กำลังทดสอบเส้นทาง Server → Docker → blastFoam…':'กำลังทดสอบ Docker บน Server…');connectionStatus('docker_connection_status','warning','กำลังทดสอบ…');
     try {
       const data=await api('/api/server/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});
+      const lingerWarning=el('linger_warning');
+      if(data.linger!=='yes'){
+        lingerWarning.hidden=false;
+        lingerWarning.textContent=`คำเตือน: systemd Linger=${data.linger||'unknown'} งานอาจหยุดเมื่อ logout\nให้ผู้ดูแลรัน: sudo loginctl enable-linger ${value('server_user')}\nหากจำเป็นต้องส่งตอนนี้ ให้เลือกยอมรับความเสี่ยงด้านล่าง`;
+      }else{lingerWarning.hidden=true;lingerWarning.textContent='';}
       data.images.forEach(addDockerImageOption);
-      const containerInfo=data.containers.map(addDockerContainerOption),running=containerInfo.filter(x=>x.status.startsWith('Up'));
+      const containerInfo=data.containers.map(addDockerContainerOption),running=containerInfo.filter(x=>x.status.startsWith('Up')&&!x.name.startsWith('blasturban-build-'));
       const runningImages=running.map(x=>x.image).filter(Boolean);runningImages.forEach(addDockerImageOption);
       if(!value('server_container')&&running.length)el('server_container').value=(running.find(x=>x.name==='ubuntu2204openfoam')||running[0]).name;
       if(!value('docker_image')&&runningImages.length) el('docker_image').value=runningImages[0];
       else if(!value('docker_image')&&data.images.length) el('docker_image').value=data.images[0];
-      let text=`เชื่อมต่อสำเร็จ: ${data.host}\nเครื่อง: ${data.architecture||'ไม่ทราบ'} · CPU ${data.cpu_threads} threads · RAM ${data.memory_gib} GiB · Disk ว่าง ${data.disk_free_gib} GiB\nDocker: ${data.docker_ok?'พร้อม '+data.docker_version:'ใช้ไม่ได้'}\nsystemd user: ${data.systemd_user_ok?'พร้อม':'ยังไม่พร้อม'}\n\nImages:\n${data.images.map(x=>'  • '+x).join('\n')||'  ไม่พบ image'}`;
+      let text=`เชื่อมต่อสำเร็จ: ${data.host}\nเครื่อง: ${data.architecture||'ไม่ทราบ'} · CPU ${data.cpu_threads} threads · RAM ${data.memory_gib} GiB · Disk ว่าง ${data.disk_free_gib} GiB\nDocker: ${data.docker_ok?'พร้อม '+data.docker_version:'ใช้ไม่ได้'}\nsystemd user: ${data.systemd_user_ok?'พร้อม':'ยังไม่พร้อม'} · Linger=${data.linger||'unknown'}\n\nImages:\n${data.images.map(x=>'  • '+x).join('\n')||'  ไม่พบ image'}`;
       if(data.containers.length) text+='\n\nContainers ที่มีอยู่:\n'+data.containers.map(x=>'  • '+x).join('\n');
       const selectedContainerCheck=(data.container_checks||{})[value('server_container')];
       if(selectedContainerCheck)text+=`\n\nContainer ${value('server_container')}: ${selectedContainerCheck.ok?'มี blastFoam และ VTK พร้อม':(selectedContainerCheck.needs_vtk?'พบ blastFoam แต่ยังไม่มี Python VTK':'ยังไม่พร้อม — '+selectedContainerCheck.detail)}`;
-      if(data.image_check) text+='\n\nImage ที่เลือก: '+(data.image_check.ok?'พร้อมคำนวณและสร้างผล Web':(data.image_check.needs_vtk?'ยังไม่มี Python VTK — ใช้ปุ่มเตรียม Image จาก Container':'ยังไม่พร้อม — '+data.image_check.detail));
+      if(data.image_check) text+='\n\nImage ที่เลือก: '+(data.image_check.ok?'พร้อมคำนวณและสร้างผล Web'+(data.image_check.cache_hit?' (readiness cache)':''):(data.image_check.needs_vtk?'ยังไม่มี Python VTK — ใช้ปุ่มเตรียม Image จาก Container':'ยังไม่พร้อม — '+data.image_check.detail));
       if(data.remote_root_ok) text+=`\n\nโฟลเดอร์งาน: พร้อมเขียน ${data.remote_root}`;
       else if(data.recommended_root){el('remote_root').value=data.recommended_root;rememberServerSettings();text+=`\n\nโฟลเดอร์เดิมเขียนไม่ได้: ${data.remote_root_error||data.remote_root}\nเปลี่ยนให้อัตโนมัติเป็น: ${data.recommended_root}`;}
       el('server_environment').textContent=`Ubuntu ${data.host} · ${data.cpu_threads} CPU threads · RAM ${data.memory_gib} GiB\nContainer ที่พบ: ${data.containers.length?data.containers.map(x=>x.split('|')[0]).join(', '):'ไม่พบ'}\nImage ที่จะใช้สร้างงานใหม่: ${value('docker_image')||'ยังไม่ได้เลือก'}`;
-      const ready=data.docker_ok&&data.systemd_user_ok&&data.remote_root_ok&&data.image_check&&data.image_check.ok;
+      const ready=data.docker_ok&&data.systemd_user_ok&&data.remote_root_ok&&data.image_check&&data.image_check.ok&&(data.linger==='yes'||el('accept_no_linger').checked);
       connectionStatus('server_connection_status','ok','เชื่อมแล้ว');
       if(!data.docker_ok)connectionStatus('docker_connection_status','error','Docker ใช้ไม่ได้');
       else if(selectedContainerCheck&&selectedContainerCheck.needs_vtk)connectionStatus('docker_connection_status','warning','เชื่อมได้ · ขาด VTK');
       else if(data.image_check&&!data.image_check.ok)connectionStatus('docker_connection_status','warning','เชื่อมได้ · Image ไม่พร้อม');
       else connectionStatus('docker_connection_status','ok','เชื่อมแล้ว');
       connectionStatus('full_connection_status',ready?'ok':'warning',ready?'พร้อมส่งงาน':'ยังต้องตั้งค่า');
-      show(outputId,text,ready?'ok':'warning');toast(ready?'Server + Docker พร้อมส่งงาน':'เชื่อมได้ แต่ยังมีค่าที่ต้องแก้',ready?'ok':'warning',6500);
+      if(data.linger!=='yes')text+=`\n\nWARNING: Linger=${data.linger||'unknown'}\nAdmin command: sudo loginctl enable-linger ${value('server_user')}`;
+      show(outputId,text,ready&&data.linger==='yes'?'ok':'warning');toast(ready?'Server + Docker พร้อมส่งงาน':'เชื่อมได้ แต่ยังมีค่าที่ต้องแก้',ready&&data.linger==='yes'?'ok':'warning',6500);
       return ready;
     } catch(error) { connectionStatus('server_connection_status','error','ตรวจ SSH ไม่ผ่าน');connectionStatus('docker_connection_status','error','เชื่อมไม่สำเร็จ');connectionStatus('full_connection_status','error','ยังไม่พร้อม');show(outputId,'ตรวจการเชื่อมต่อไม่สำเร็จ: '+error.message,'error');toast('ตรวจการเชื่อมต่อไม่สำเร็จ\n'+error.message,'error',8500);return false; } finally { setBusy(false); }
   }
@@ -741,18 +934,47 @@
     try { const data=await api('/api/server/push-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});connectionStatus('docker_connection_status','warning','ส่ง Image แล้ว · รอทดสอบ');show('docker_test_output',data.message+'\n'+data.detail+'\n\nกด “ทดสอบ Docker” อีกครั้งเพื่อยืนยัน','ok');toast('ส่ง Docker image ไป Server สำเร็จ','ok'); }
     catch(error) { connectionStatus('docker_connection_status','error','ส่ง Image ไม่สำเร็จ');show('docker_test_output','ส่ง Docker image ไม่สำเร็จ: '+error.message,'error');toast('ส่ง Docker image ไม่สำเร็จ\n'+error.message,'error',8500); } finally { setBusy(false); }
   }
+  function formatDuration(seconds) {
+    const total=Math.max(0,Math.round(Number(seconds)||0));
+    if(total<60)return `${total} วินาที`;
+    const hours=Math.floor(total/3600),minutes=Math.floor((total%3600)/60),secs=total%60;
+    if(hours)return `${hours} ชม. ${minutes} นาที`;
+    return `${minutes} นาที ${secs} วินาที`;
+  }
+  function renderJobProgress(status) {
+    const panel=el('job_progress'),p=status.progress||{},stage=p.stage||status.state||'preparing';
+    const labels={uploading:'กำลังส่ง Case ไป Server',queued:'รอ systemd เริ่มงาน',preparing:'เตรียม Docker/OpenFOAM',meshing:'กำลังสร้าง Mesh',initializing:'กำหนด Source และค่าเริ่มต้น',solving:'กำลังคำนวณ blastFoam',web_result:'กำลังสร้างผล Web 3D',complete:'เสร็จสมบูรณ์',failed:'งานล้มเหลว',web_result_failed:'สร้างผล Web ไม่สำเร็จ',stopped:'หยุดแล้ว'};
+    panel.hidden=false;el('job_progress_stage').textContent=labels[stage]||stage;
+    const fraction=Number(p.fraction),hasFraction=p.fraction!==null&&p.fraction!==undefined&&Number.isFinite(fraction);
+    const percent=hasFraction?Math.max(0,Math.min(100,fraction*100)):null,bar=el('job_progress_bar');
+    bar.classList.toggle('indeterminate',percent===null&&['uploading','queued','preparing','meshing','initializing','solving','web_result'].includes(stage));
+    if(percent!==null)bar.style.width=`${percent}%`;else bar.style.width='0';
+    el('job_progress_percent').textContent=percent===null?'—':`${percent.toFixed(percent<10?1:0)}%`;
+    const lines=[];
+    if(p.elapsed_seconds!==null&&p.elapsed_seconds!==undefined)lines.push(`ผ่านไปแล้ว ${formatDuration(p.elapsed_seconds)}`);
+    if(stage==='solving'&&p.physical_time!==null&&p.physical_time!==undefined&&p.end_time)lines.push(`เวลา CFD ${Number(p.physical_time).toPrecision(5)} / ${Number(p.end_time).toPrecision(5)} s`);
+    if(p.eta_seconds!==null&&p.eta_seconds!==undefined&&stage!=='complete'){
+      const confidence={low:'ข้อมูลยังน้อย',medium:'อิงแนวโน้มระหว่างรัน',actual:'เวลาจริง'}[p.confidence]||'ค่าประมาณ';
+      lines.push(`solver เหลือประมาณ ${formatDuration(p.eta_seconds)} · ${confidence} · ยังไม่รวม Web 3D`);
+    } else if(['queued','preparing','meshing','initializing'].includes(stage)) lines.push('ETA จะเริ่มคำนวณเมื่อ blastFoam มีข้อมูล Time/ClockTime');
+    else if(stage==='solving') lines.push('กำลังสะสมข้อมูลเพื่อคำนวณ ETA');
+    else if(stage==='complete') lines.push('เวลารวมเป็นเวลาที่วัดจริงจาก Server');
+    el('job_progress_time').textContent=lines.join('\n')||status.message||'ยังไม่มีข้อมูลเวลา';
+  }
   async function submitServerJob() {
     if(!localCaseConfirmed||!value('local_case_path')) { show('server_output','กรุณาเลือก Case จากรายการ หรือกด “Open Case…” เพื่อยืนยันโฟลเดอร์ที่จะส่ง','error');toast('ต้องเลือกและยืนยัน Case ก่อนส่ง Server','error');return; }
+    renderJobProgress({state:'uploading',progress:{stage:'uploading'}});
     setBusy(true,'กำลังส่ง Case ด้วย rsync และเริ่ม Docker…');
-    try { const data=await api('/api/server/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())}); el('server_case_name').value=data.case_name;el('remote_root').value=data.remote_root;rememberServerSettings();show('server_output',`${data.message}\nCPU ที่เลือก: ${data.cores} thread${data.core_mode==='auto'?' (Auto)':''}\nCase: ${data.remote_case}\nSystemd unit: ${data.unit}`,'ok');toast('ส่งงานและเริ่มคำนวณบน Server สำเร็จ','ok',6000);startServerPolling(); }
-    catch(error) { show('server_output','ส่งงานไม่สำเร็จ: '+error.message,'error');toast('ส่งงานไม่สำเร็จ\n'+error.message,'error',9000); } finally { setBusy(false); }
+    try { const data=await api('/api/server/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())}); el('server_case_name').value=data.case_name;el('remote_root').value=data.remote_root;rememberServerSettings();const transfer=data.transferred_bytes===null?'ไม่ทราบขนาด':`${formatBytes(data.transferred_bytes)} ใน ${formatDuration(data.transfer_seconds)}${data.transfer_mib_s!==null?` · ${data.transfer_mib_s} MiB/s`:''}`;show('server_output',`${data.message}\nส่งข้อมูล: ${transfer}\nCPU ที่เลือก: ${data.cores} thread${data.core_mode==='auto'?' (Auto)':''}\nCase: ${data.remote_case}\nSystemd unit: ${data.unit}\nETA จะแสดงหลัง blastFoam เริ่มเขียน Time/ClockTime`,'ok');renderJobProgress({state:'queued',progress:{stage:'queued',elapsed_seconds:0}});toast('ส่งงานและเริ่มคำนวณบน Server สำเร็จ','ok',6000);startServerPolling(); }
+    catch(error) { renderJobProgress({state:'failed',message:error.message,progress:{stage:'failed'}});show('server_output','ส่งงานไม่สำเร็จ: '+error.message,'error');toast('ส่งงานไม่สำเร็จ\n'+error.message,'error',9000); } finally { setBusy(false); }
   }
   async function serverStatus(silent=false) {
     try {
       const data=await api('/api/server/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())}); const s=data.status;
       const errorStates=['failed','viewer_failed','not_submitted','not_found'],kind=s.state==='complete'?'ok':(errorStates.includes(s.state)?'error':'warning');
       const stateLabel={not_submitted:'ยังไม่ได้ส่งงาน',not_found:'ไม่พบงาน'}[s.state]||s.state;
-      show('server_output',`สถานะ: ${stateLabel}\n${s.message||''}\nอัปเดต: ${s.updated_utc||'-'}\nHost: ${s.host||'-'} · Core: ${s.cores||0} · RAM limit: ${s.memory_gib_limit||0} GiB${s.container?'\nDocker container งาน: '+s.container+' · Case อยู่ที่ /case':''}${s.failure?'\nสาเหตุ: '+s.failure+(s.exit_code?' (exit '+s.exit_code+')':''):''}${s.last_log?'\nLog ล่าสุด: '+s.last_log:''}${s.systemd&&s.systemd.unit?'\nsystemd: '+s.systemd.unit+' · '+(s.systemd.active_state||'-')+'/'+(s.systemd.sub_state||'-')+(s.systemd.recorded&&s.systemd.recorded.service_result?' · result='+s.systemd.recorded.service_result:''):''}`,kind);
+      renderJobProgress(s);
+      show('server_output',`สถานะ: ${stateLabel}\n${s.message||''}\nอัปเดต: ${s.updated_utc||'-'}\nHost: ${s.host||'-'} · Core: ${s.cores||0} · RAM limit: ${s.memory_gib_limit||0} GiB\nLinger: ${s.linger||'unknown'} · accepted risk: ${s.accept_no_linger?'yes':'no'}${s.container?'\nDocker container งาน: '+s.container+' · Case อยู่ที่ /case':''}${s.failure?'\nสาเหตุ: '+s.failure+(s.exit_code?' (exit '+s.exit_code+')':''):''}${s.docker_exit_code!==null&&s.docker_exit_code!==undefined?'\nDocker exit: '+s.docker_exit_code:''}${s.oom_killed!==null&&s.oom_killed!==undefined?' · OOMKilled='+s.oom_killed:''}${s.last_log?'\nLog ล่าสุด: '+s.last_log:''}${s.systemd&&s.systemd.unit?'\nsystemd: '+s.systemd.unit+' · '+(s.systemd.active_state||'-')+'/'+(s.systemd.sub_state||'-')+(s.systemd.recorded&&s.systemd.recorded.service_result?' · result='+s.systemd.recorded.service_result:''):''}`,kind);
       if(!silent)toast(`สถานะงาน: ${stateLabel}`,kind);
       if(['complete','failed','viewer_failed','stopped','not_submitted','not_found'].includes(s.state)&&serverPollTimer) { clearInterval(serverPollTimer);serverPollTimer=null; }
     statusFailures=0;
@@ -782,16 +1004,17 @@
     while(value>=1024&&i<units.length-1){value/=1024;i++;}
     return `${value.toFixed(i?1:0)} ${units[i]}`;
   }
+  function formatAge(seconds){const days=Math.floor((Number(seconds)||0)/86400);if(days)return `${days} วัน`;const hours=Math.floor((Number(seconds)||0)/3600);return hours?`${hours} ชม.`:'< 1 ชม.';}
   async function refreshServerJobs(notify=true) {
     setBusy(true,'กำลังอ่านรายการและขนาดงานบน Server…');
     try {
       const data=await api('/api/server/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serverCollect())});
       const select=el('server_job_select'),previous=select.value;select.textContent='';
       if(!data.jobs.length){const option=document.createElement('option');option.value='';option.textContent='ยังไม่มีงาน';select.appendChild(option);}
-      data.jobs.forEach(job=>{const option=document.createElement('option');option.value=job.name;option.textContent=`${job.name} · ${job.state} · ${formatBytes(job.size_bytes)}`;option.dataset.result=job.has_web_result?'1':'0';select.appendChild(option);});
+      data.jobs.forEach(job=>{const option=document.createElement('option');option.value=job.name;option.textContent=`${job.name} · ${job.classification} · ${formatBytes(job.size_bytes)}`;option.dataset.result=job.has_web_result?'1':'0';select.appendChild(option);});
       if([...select.options].some(option=>option.value===previous))select.value=previous;
       el('server_disk_summary').textContent=`พื้นที่ว่าง ${formatBytes(data.disk_free_bytes)} จาก ${formatBytes(data.disk_total_bytes)} · พบ ${data.jobs.length} งาน`;
-      const lines=data.jobs.map(job=>`${job.active?'🔄':(job.has_web_result?'✓':'•')} ${job.name}\n   ${job.state} · ${formatBytes(job.size_bytes)} · ${job.updated}${job.message?'\n   '+job.message:''}`);
+      const lines=data.jobs.map(job=>`${job.active?'🔄':(job.has_web_result?'✓':'•')} ${job.name}\n   ${job.classification} (${job.state}) · ${formatBytes(job.size_bytes)}${job.size_timed_out?' (ขนาดล่าสุด/timeout)':''} · อายุ ${formatAge(job.age_seconds)}\n   unit: ${job.unit||'ไม่มี'}${job.message?'\n   '+job.message:''}`);
       show('jobs_output',lines.join('\n\n')||'ยังไม่มีงานในโฟลเดอร์ Server','ok');
       if(notify)toast(`อ่านรายการงานสำเร็จ · พบ ${data.jobs.length} งาน`,'ok');
     } catch(error){show('jobs_output','อ่านรายการงานไม่สำเร็จ: '+error.message,'error');if(notify)toast('อ่านรายการงานไม่สำเร็จ\n'+error.message,'error',8000);} finally {setBusy(false);}
@@ -810,10 +1033,9 @@
   }
   async function cleanupOldServerJobs() {
     const days=Math.max(1,Number(value('cleanup_days'))||30);
-    if(!confirm(`ลบเฉพาะงานที่จบ/ล้มเหลว/หยุด และเก่ากว่า ${days} วันหรือไม่?\nงานที่กำลังทำจะไม่ถูกลบ`))return;
-    setBusy(true,'กำลังล้างงานเก่าบน Server…');
-    try {const payload=serverCollect();payload.cleanup_days=days;const data=await api('/api/server/cleanup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});show('jobs_output',data.deleted.length?`ลบ ${data.deleted.length} งาน:\n${data.deleted.join('\n')}`:`ไม่มีงานที่เข้าเงื่อนไขเก่ากว่า ${days} วัน`,'warning');toast(data.deleted.length?`ล้างงานเก่าสำเร็จ · ลบ ${data.deleted.length} งาน`:`ไม่มีงานเก่าที่ต้องลบ`,'warning');await refreshServerJobs(false);}
-    catch(error){show('jobs_output','ล้างงานเก่าไม่สำเร็จ: '+error.message,'error');toast('ล้างงานเก่าไม่สำเร็จ\n'+error.message,'error',8000);}finally{setBusy(false);}
+    setBusy(true,'กำลังสร้างรายการ dry-run — จะยังไม่ลบ…');
+    try {const payload=serverCollect();payload.cleanup_days=days;const data=await api('/api/server/cleanup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const lines=data.candidates.map(item=>`• ${item.name} · ${item.classification} · อายุ ${formatAge(item.age_seconds)}\n  ${item.reason}`);show('jobs_output',lines.length?`DRY-RUN — ยังไม่ได้ลบ\n\n${lines.join('\n\n')}\n\nหากยืนยัน ให้เลือกชื่องานแล้วใช้ “ลบงานที่เลือก” ทีละงาน`:`DRY-RUN — ไม่มีงานที่เข้าเงื่อนไขเก่ากว่า ${days} วัน`,'warning');toast(`Dry-run เสร็จ · พบ ${data.candidates.length} งาน · ยังไม่ได้ลบ`,'warning');}
+    catch(error){show('jobs_output','สร้าง dry-run ไม่สำเร็จ: '+error.message,'error');toast('สร้าง dry-run ไม่สำเร็จ\n'+error.message,'error',8000);}finally{setBusy(false);}
   }
   function openResultWindow(){if(currentResultUrl)window.open(currentResultUrl,'_blank','noopener');}
   fetch('/api/defaults').then(r=>r.json()).then(d=>{
@@ -837,17 +1059,27 @@
   }));
   ['remote_root','server_core_mode','server_cores','server_memory'].forEach(id=>el(id).addEventListener('change',()=>connectionStatus('full_connection_status','','รอทดสอบใหม่')));
   el('server_user').addEventListener('change',()=>{if(!value('remote_root')||value('remote_root')==='/home/openfoam/BlastUrbanJobs')el('remote_root').value=`/home/${value('server_user')}/BlastUrbanJobs`;rememberServerSettings();});
-  ['mass','density','target_cell','charge_level'].forEach(id=>el(id).addEventListener('input',updateCharge));
-  ['xmin','ymin','zmin','xmax','ymax','zmax','nx','ny','nz','charge_x','charge_y','charge_z','probes'].forEach(id=>el(id).addEventListener('input',drawPreview));
+  ['mass','density'].forEach(id=>el(id).addEventListener('input',autoCharge));
+  el('target_cell').addEventListener('input',()=>{el('performance_profile').value='custom';autoCharge();});
+  el('charge_level').addEventListener('input',updateCharge);
+  ['charge_x','charge_y','charge_height','source_delay'].forEach(id=>el(id).addEventListener('input',sourceInputChanged));
+  el('source_select').addEventListener('change',event=>switchSource(event.target.value));
+  ['xmin','ymin','zmin','xmax','ymax','zmax','nx','ny','nz'].forEach(id=>el(id).addEventListener('input',()=>{syncSourceAbsoluteZ();drawPreview();}));
+  el('probes').addEventListener('input',()=>{autoProbeLayout=false;drawPreview();});
   ['preview_style','show_grid','show_domain','show_source','show_probes'].forEach(id=>el(id).addEventListener('change',drawPreview));
+  el('performance_profile').addEventListener('change',()=>applyPerformanceProfile(true));
+  el('end_time').addEventListener('input',()=>{const profile=value('performance_profile');if(profile==='fast')syncOutputCadence(48);else if(profile==='quality')syncOutputCadence(96);updateCharge();});
+  ['snappy_cells','dynamic_cells','dynamic_levels','refine_interval','max_delta_t','write_interval'].forEach(id=>el(id).addEventListener('change',()=>el('performance_profile').value='custom'));
   el('scale').addEventListener('input',schedulePreviewReload); el('stl_path').addEventListener('change',schedulePreviewReload); el('stl_file').addEventListener('change',importSelectedModel);
   const canvas=el('model_preview');
-  canvas.addEventListener('pointerdown',event=>{preview.drag=true;preview.lastX=event.clientX;preview.lastY=event.clientY;canvas.classList.add('dragging');canvas.setPointerCapture(event.pointerId);});
-  canvas.addEventListener('pointermove',event=>{if(!preview.drag)return;preview.yaw+=(event.clientX-preview.lastX)*.009;preview.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,preview.pitch+(event.clientY-preview.lastY)*.009));preview.lastX=event.clientX;preview.lastY=event.clientY;drawPreview();});
-  canvas.addEventListener('pointerup',event=>{preview.drag=false;canvas.classList.remove('dragging');canvas.releasePointerCapture(event.pointerId);});
+  canvas.addEventListener('pointerdown',event=>{if(preview.placingSource){placeSourceFromPointer(event);return;}preview.drag=true;preview.lastX=event.clientX;preview.lastY=event.clientY;canvas.classList.add('dragging');canvas.setPointerCapture(event.pointerId);});
+  canvas.addEventListener('pointermove',event=>{if(preview.placingSource){preview.hoverSource=sourceXYFromPointer(event);drawPreview();return;}if(!preview.drag)return;preview.yaw+=(event.clientX-preview.lastX)*.009;preview.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,preview.pitch+(event.clientY-preview.lastY)*.009));preview.lastX=event.clientX;preview.lastY=event.clientY;drawPreview();});
+  canvas.addEventListener('pointerleave',()=>{if(preview.placingSource){preview.hoverSource=null;drawPreview();}});
+  canvas.addEventListener('pointerup',event=>{preview.drag=false;canvas.classList.remove('dragging');if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);});
   canvas.addEventListener('pointercancel',()=>{preview.drag=false;canvas.classList.remove('dragging');});
   canvas.addEventListener('wheel',event=>{event.preventDefault();preview.zoom=Math.max(.25,Math.min(8,preview.zoom*Math.exp(-event.deltaY*.001)));drawPreview();},{passive:false});
-  new ResizeObserver(drawPreview).observe(canvas); updateCharge();
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&preview.placingSource){cancelSourcePlacement();drawPreview();}});
+  new ResizeObserver(drawPreview).observe(canvas);renderSourceSelector();applyPerformanceProfile(false);
 </script>
 </body>
 </html>

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import errno
+import hashlib
 import math
 import os
 import pty
@@ -26,13 +27,14 @@ import webbrowser
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from blast_case_builder import (
     DEFAULT_TEMPLATE,
     Bounds,
     CaseConfig,
+    ChargeSource,
     StlReport,
     analyse_stl,
     auto_charge_level,
@@ -63,6 +65,10 @@ REQUIRED_EXECUTABLES = (
     "surfaceCheck surfaceFeatures blockMesh checkMesh decomposePar snappyHexMesh "
     "addEmptyPatch setRefinedFields blastFoam blastToVTK calculateImpulse mpirun"
 )
+SSH_MULTIPLEX_ENABLED = os.environ.get("BLASTURBAN_SSH_MULTIPLEX", "1") != "0"
+# Cache only a successful check for an immutable image ID + platform.  The
+# production smoke benchmark verified the hit path; set the flag to 0 to revert.
+IMAGE_READY_CACHE_ENABLED = os.environ.get("BLASTURBAN_IMAGE_READY_CACHE", "1") != "0"
 # Image readiness runs through plain `bash -c`.  A login shell (`bash -lc`)
 # executes ~/.bash_logout on an explicit exit; Ubuntu's clear_console fails
 # without a terminal and turns a successful check into status 1.
@@ -80,7 +86,16 @@ for command in {REQUIRED_EXECUTABLES}; do
     command -v "$command" >/dev/null 2>&1 || missing="$missing $command"
 done
 if [ -n "$missing" ]; then echo "missing executables:$missing" >&2; exit 2; fi
-# command -v only proves a path exists; running the solver also catches
+blast_path=$(command -v blastFoam 2>/dev/null || true)
+case "$blast_path" in
+    /*) ;;
+    *) echo "blastFoam did not resolve to an absolute executable path" >&2; exit 4 ;;
+esac
+if [ ! -f "$blast_path" ] || [ ! -x "$blast_path" ]; then
+    echo "blastFoam path is not an executable file: $blast_path" >&2
+    exit 4
+fi
+# Running the solver also catches
 # missing shared libraries, a wrong architecture, or a broken environment.
 if ! blastFoam -help >/dev/null 2>&1; then
     echo "blastFoam is on PATH but cannot execute (libraries, architecture, or environment)" >&2
@@ -99,24 +114,13 @@ class AppState:
         # Desktop on macOS while keeping the repository uncluttered.
         runtime_parent = DEFAULT_WORKSPACE / "temp"
         runtime_parent.mkdir(parents=True, exist_ok=True)
-        stale_before = time.time() - 7 * 86400
-        for candidate in runtime_parent.glob(".ui-work-*"):
-            try:
-                if not candidate.is_dir() or candidate.stat().st_mtime >= stale_before:
-                    continue
-                owner_path = candidate / ".owner.json"
-                owner = json.loads(owner_path.read_text(encoding="utf-8")) if owner_path.is_file() else {}
-                owner_pid = int(owner.get("pid", 0))
-                if owner_pid:
-                    try:
-                        os.kill(owner_pid, 0)
-                        continue
-                    except (OSError, ProcessLookupError):
-                        pass
-                shutil.rmtree(candidate)
-            except (OSError, ValueError, TypeError, json.JSONDecodeError):
-                # Temporary cleanup must never prevent the UI from starting.
-                pass
+        # Stale workspaces are intentionally not deleted at startup.  They are
+        # inventoried by tools/cleanup-workspace.sh and require an explicit,
+        # named confirmation before being moved to the Trash.
+        self.ssh_control_dir = runtime_parent / "ssh-control"
+        self.ssh_control_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.ssh_control_dir.chmod(0o700)
+        self.ssh_masters: Dict[Tuple[str, str, int, str], Path] = {}
         self.upload_dir = Path(tempfile.mkdtemp(prefix=".ui-work-", dir=runtime_parent))
         (self.upload_dir / ".owner.json").write_text(
             json.dumps({"pid": os.getpid(), "created": time.time()}) + "\n",
@@ -127,7 +131,31 @@ class AppState:
         self.lock = threading.Lock()
 
     def close(self) -> None:
+        with self.lock:
+            masters = list(self.ssh_masters.items())
+            self.ssh_masters.clear()
+        for (host, user, port, key), socket_path in masters:
+            subprocess.run(
+                [
+                    "ssh", "-i", key, "-p", str(port), "-S", str(socket_path),
+                    "-O", "exit", f"{user}@{host}",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                check=False,
+            )
         shutil.rmtree(self.upload_dir, ignore_errors=True)
+
+    def ssh_control_path(self, host: str, user: str, port: int, key: Path) -> Path:
+        identity = f"{user}@{host}:{port}|{key}"
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+        path = self.ssh_control_dir / f"cm-{digest}"
+        if len(os.fsencode(path)) >= 100:
+            raise ValueError("SSH ControlPath ยาวเกินข้อจำกัด Unix socket")
+        with self.lock:
+            self.ssh_masters[(host, user, port, str(key))] = path
+        return path
 
     def report(self, path: Path, scale: float, external: bool) -> StlReport:
         resolved = str(path.expanduser().resolve())
@@ -182,6 +210,7 @@ REQUIRED_CASE_FILES = (
     "case-builder.json",
     "server-docker-job.sh",
     "makeWebResults.sh",
+    "runBlastToVTKIsolated.sh",
     "preflight.sh",
     "Allrun",
     "organizeSurfaceCheckOutput.sh",
@@ -198,6 +227,55 @@ REQUIRED_CASE_FILES = (
     "visualization/exportBlast3D.py",
     "visualization/viewer_template.html",
 )
+
+# Cases are durable user artifacts and may be submitted again long after they
+# were created. Refresh only orchestration/result-export code from this
+# checkout before a remote job starts; never replace CFD dictionaries,
+# generated solver scripts, geometry, or physical inputs here.
+TRUSTED_RUNTIME_ASSETS = (
+    ("server-run-auto.sh", PROJECT_ROOT / "tools/blast_case_ui/assets/server-run-auto.sh"),
+    ("server-docker-job.sh", PROJECT_ROOT / "tools/blast_case_ui/assets/server-docker-job.sh"),
+    ("makeWebResults.sh", PROJECT_ROOT / "tools/blast_case_ui/assets/makeWebResults.sh"),
+    (
+        "runBlastToVTKIsolated.sh",
+        PROJECT_ROOT / "tools/blast_case_ui/assets/runBlastToVTKIsolated.sh",
+    ),
+    (
+        "visualization/exportBlast3D.py",
+        PROJECT_ROOT
+        / "tutorials/blastFoam/building3DWorkshop/visualization/exportBlast3D.py",
+    ),
+    (
+        "visualization/viewer_template.html",
+        PROJECT_ROOT
+        / "tutorials/blastFoam/building3DWorkshop/visualization/viewer_template.html",
+    ),
+)
+
+
+def stage_trusted_runtime_assets(destination: Path) -> Dict[str, str]:
+    """Stage current non-CFD runtime assets and return their SHA-256 map."""
+    destination = Path(destination)
+    hashes: Dict[str, str] = {}
+    for relative_name, source in TRUSTED_RUNTIME_ASSETS:
+        if not source.is_file():
+            raise ValueError(f"ไม่พบ trusted runtime asset: {source}")
+        target = destination / relative_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        if target.suffix == ".sh":
+            target.chmod(0o755)
+        hashes[relative_name] = hashlib.sha256(target.read_bytes()).hexdigest()
+    manifest = {
+        "schema_version": 1,
+        "purpose": "trusted_runtime_overlay",
+        "assets": hashes,
+    }
+    (destination / "blasturban-runtime-assets.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return hashes
 
 
 def missing_case_files(case: Path) -> list[str]:
@@ -242,7 +320,16 @@ def local_case_records(parent: Path) -> list[Dict[str, Any]]:
                 "path": str(candidate),
                 "updated_epoch": stat.st_mtime,
                 "configured_name": str(config.get("case_name", candidate.name)),
-                "charge_mass": config.get("charge_mass"),
+                "charge_mass": (
+                    sum(float(source.get("mass", 0)) for source in config.get("sources", []) if isinstance(source, dict))
+                    if isinstance(config.get("sources"), list) and config.get("sources")
+                    else config.get("charge_mass")
+                ),
+                "source_count": (
+                    len(config.get("sources", []))
+                    if isinstance(config.get("sources"), list) and config.get("sources")
+                    else 1
+                ),
                 "end_time": config.get("end_time"),
                 "mpi_ranks": config.get("mpi_ranks"),
             }
@@ -280,10 +367,10 @@ def _remote_root(data: Dict[str, Any]) -> PurePosixPath:
     return path
 
 
-def _ssh_args(host: str, user: str, port: int, key: Path) -> list[str]:
+def _ssh_transport_args(host: str, user: str, port: int, key: Path) -> list[str]:
     if not key.is_file():
         raise ValueError(f"ยังไม่มี SSH key: {key}; กด ‘ติดตั้ง SSH Key’ ก่อน")
-    return [
+    arguments = [
         "ssh",
         "-i",
         str(key),
@@ -297,8 +384,31 @@ def _ssh_args(host: str, user: str, port: int, key: Path) -> list[str]:
         "ServerAliveInterval=15",
         "-o",
         "StrictHostKeyChecking=accept-new",
-        f"{user}@{host}",
     ]
+    if SSH_MULTIPLEX_ENABLED:
+        control_path = STATE.ssh_control_path(host, user, port, key)
+        arguments.extend(
+            [
+                "-o", "ControlMaster=auto",
+                "-o", "ControlPersist=60",
+                "-o", f"ControlPath={control_path}",
+            ]
+        )
+    return arguments
+
+
+def _ssh_args(host: str, user: str, port: int, key: Path) -> list[str]:
+    return _ssh_transport_args(host, user, port, key) + [f"{user}@{host}"]
+
+
+def validate_fetch_state(state: str) -> None:
+    """Reject every non-success job state before rsync downloads results."""
+    if state in {"complete", "legacy"}:
+        return
+    if state in {"queued", "running", "postprocessing"}:
+        raise ValueError(f"งานยังทำงานอยู่ (สถานะ {state}) จึงยังดึงผลไม่ได้")
+    label = state or "unknown"
+    raise ValueError(f"ไม่ดึงผลจากงานสถานะ {label}; อ่าน Log เพื่อดูสาเหตุ")
 
 
 def _run_remote(
@@ -388,7 +498,35 @@ def _vec(data: Dict[str, Any], prefix: str) -> Tuple[float, float, float]:
     return (_number(data, prefix + "_x"), _number(data, prefix + "_y"), _number(data, prefix + "_z"))
 
 
+def _charge_sources(data: Dict[str, Any]) -> List[ChargeSource]:
+    raw_sources = data.get("sources")
+    if raw_sources is None:
+        return []
+    if not isinstance(raw_sources, list):
+        raise ValueError("sources: ต้องเป็นรายการ")
+    sources: List[ChargeSource] = []
+    for index, raw in enumerate(raw_sources, 1):
+        if not isinstance(raw, dict):
+            raise ValueError(f"Source {index}: รูปแบบข้อมูลไม่ถูกต้อง")
+        centre_raw = raw.get("centre")
+        if not isinstance(centre_raw, (list, tuple)) or len(centre_raw) != 3:
+            raise ValueError(f"Source {index}: centre ต้องมี X Y Z ครบ")
+        try:
+            centre = tuple(float(value) for value in centre_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Source {index}: พิกัดต้องเป็นตัวเลข") from exc
+        if not all(math.isfinite(value) for value in centre):
+            raise ValueError(f"Source {index}: พิกัดต้องเป็นตัวเลข finite")
+        mass = _number(raw, "mass")
+        delay = _number(raw, "delay")
+        sources.append(ChargeSource(centre=centre, mass=mass, delay=delay))  # type: ignore[arg-type]
+    return sources
+
+
 def payload_to_config(data: Dict[str, Any]) -> CaseConfig:
+    sources = _charge_sources(data)
+    primary_centre = sources[0].centre if sources else _vec(data, "charge")
+    primary_mass = sources[0].mass if sources else _number(data, "mass")
     return CaseConfig(
         case_name=str(data.get("case_name", "urbanBlast3D")),
         stl_path=str(data.get("stl_path", "")),
@@ -404,8 +542,9 @@ def payload_to_config(data: Dict[str, Any]) -> CaseConfig:
         dynamic_max_refinement=_integer(data, "dynamic_levels"),
         refine_interval=_integer(data, "refine_interval"),
         location_in_mesh=_vec(data, "location"),
-        charge_centre=_vec(data, "charge"),
-        charge_mass=_number(data, "mass"),
+        charge_centre=primary_centre,
+        charge_mass=primary_mass,
+        sources=sources,
         explosive_density=_number(data, "density"),
         charge_refinement_level=_integer(data, "charge_level"),
         probes=parse_probes(str(data.get("probes", ""))),
@@ -420,6 +559,7 @@ def payload_to_config(data: Dict[str, Any]) -> CaseConfig:
         mpi_ranks=_integer(data, "mpi"),
         output_binary=bool(data.get("binary", True)),
         allow_surface_errors=bool(data.get("allow_surface_errors", False)),
+        performance_profile=str(data.get("performance_profile", "fast")),
     )
 
 
@@ -787,32 +927,76 @@ class Handler(BaseHTTPRequestHandler):
         config = payload_to_config(data)
         stl = Path(config.stl_path).expanduser().resolve()
         report = STATE.report(stl, config.stl_scale, external=False)
-        inside, distance = point_surface_relation(stl, config.stl_scale, config.charge_centre)
-        radius = config.theoretical_charge_radius
-        if not config.domain.contains(config.charge_centre, margin=radius):
-            level = "error"
-            message = "Source หรือตัวทรงกลมอยู่นอก Domain"
-        elif inside:
-            level = "error"
-            message = "Source อยู่ภายในผิวอาคาร กรุณาย้ายตำแหน่ง"
-        elif distance < radius:
-            level = "error"
-            message = f"Source ตัดผิวอาคาร: ห่าง {distance:.4g} m แต่รัศมี {radius:.4g} m"
-        elif report.errors:
-            level = "warning"
-            message = "ตำแหน่งไม่ตัดผิวที่พบ แต่โมเดลยังมีรอยเปิด จึงควรซ่อมก่อนยืนยัน"
+        results: List[Dict[str, Any]] = []
+        for index, source in enumerate(config.effective_sources, 1):
+            inside, distance = point_surface_relation(stl, config.stl_scale, source.centre)
+            radius = source.radius(config.explosive_density)
+            if not config.domain.contains(source.centre, margin=radius):
+                level = "error"
+                message = f"Source {index} หรือตัวทรงกลมอยู่นอก Domain"
+            elif inside:
+                level = "error"
+                message = f"Source {index} อยู่ภายในผิวอาคาร กรุณาย้ายตำแหน่ง"
+            elif distance < radius:
+                level = "error"
+                message = f"Source {index} ตัดผิวอาคาร: ห่าง {distance:.4g} m แต่รัศมี {radius:.4g} m"
+            elif report.errors:
+                level = "warning"
+                message = f"Source {index} ไม่ตัดผิวที่พบ แต่โมเดลยังมีรอยเปิด จึงควรซ่อมก่อนยืนยัน"
+            else:
+                level = "ok"
+                message = f"Source {index} ใช้ได้ · ระยะจากผิวอาคารใกล้สุด {distance:.4g} m"
+            results.append(
+                {
+                    "ok": level == "ok",
+                    "level": level,
+                    "message": message,
+                    "inside_model": inside,
+                    "distance_to_surface": distance,
+                    "radius": radius,
+                    "centre": source.centre,
+                }
+            )
+        for left in range(len(results)):
+            for right in range(left + 1, len(results)):
+                separation = math.dist(
+                    config.effective_sources[left].centre,
+                    config.effective_sources[right].centre,
+                )
+                required = results[left]["radius"] + results[right]["radius"]
+                if separation < required:
+                    message = (
+                        f"Source {left + 1} และ Source {right + 1} ซ้อนกัน "
+                        f"({separation:.4g} < {required:.4g} m)"
+                    )
+                    for item in (results[left], results[right]):
+                        item["ok"] = False
+                        item["level"] = "error"
+                        item["message"] = message
+        requested_index = max(0, min(_integer(data, "source_index") if "source_index" in data else 0, len(results) - 1))
+        selected = results[requested_index]
+        if any(item["level"] == "error" for item in results):
+            aggregate_level = "error"
+        elif any(item["level"] == "warning" for item in results):
+            aggregate_level = "warning"
         else:
-            level = "ok"
-            message = f"ตำแหน่ง Source ใช้ได้ · ระยะจากผิวอาคารใกล้สุด {distance:.4g} m"
+            aggregate_level = "ok"
+        aggregate_message = (
+            f"ตรวจ {len(results)} Sources แล้ว · "
+            + ("พร้อมใช้งานทั้งหมด" if aggregate_level == "ok" else selected["message"])
+        )
         self._json(
             200,
             {
-                "ok": level == "ok",
-                "level": level,
-                "message": message,
-                "inside_model": inside,
-                "distance_to_surface": distance,
-                "radius": radius,
+                "ok": aggregate_level == "ok",
+                "level": aggregate_level,
+                "message": aggregate_message,
+                "inside_model": selected["inside_model"],
+                "distance_to_surface": selected["distance_to_surface"],
+                "radius": selected["radius"],
+                "centre": selected["centre"],
+                "sources": results,
+                "model_base_z": report.bounds.minimum[2],
             },
         )
 
@@ -829,6 +1013,9 @@ class Handler(BaseHTTPRequestHandler):
                 "warnings": warnings,
                 "estimate": config.estimate(),
                 "charge_radius": config.theoretical_charge_radius,
+                "charge_radii": [source.radius(config.explosive_density) for source in config.effective_sources],
+                "source_count": len(config.effective_sources),
+                "total_charge_mass": config.total_charge_mass,
                 "actual_cell_size": config.actual_cell_size,
                 "base_cells": config.base_cells,
             },
@@ -1000,8 +1187,8 @@ PY
 set -eu
 selected=${1:-}
 requested_root=$2
-python3 - "$selected" "$requested_root" "$3" "${4:-}" <<'PY'
-import json, os, platform, shutil, socket, subprocess, sys
+python3 - "$selected" "$requested_root" "$3" "${4:-}" "${5:-1}" <<'PY'
+import hashlib, json, os, platform, pwd, shutil, socket, subprocess, sys, tempfile
 
 def run(command):
     try:
@@ -1032,17 +1219,19 @@ images = []
 containers = []
 container_checks = {}
 if docker_code == 0:
-    _, image_text, _ = run(["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"])
+    _, image_text, _ = run(["docker", "images", "--filter", "reference=blasturban/*", "--format", "{{.Repository}}:{{.Tag}}"])
     images = sorted({line for line in image_text.splitlines() if line and not line.endswith(":<none>")})
-    _, container_text, _ = run(["docker", "ps", "-a", "--format", "{{.Names}}|{{.Image}}|{{.Status}}"])
-    containers = [line for line in container_text.splitlines() if line]
+    _, container_text, _ = run(["docker", "ps", "-a", "--filter", "name=blasturban", "--format", "{{.Names}}|{{.Image}}|{{.Status}}"])
+    containers = [line for line in container_text.splitlines() if line.startswith("blasturban")]
     container_command = sys.argv[3]
     for record in containers:
         name, _, status = (record.split("|", 2) + ["", ""])[:3]
-        if status.startswith("Up"):
+        if status.startswith("Up") and not name.startswith("blasturban-build-"):
             code, output, error = run(["docker", "exec", "--user", "0", name, "/bin/bash", "-c", container_command])
             container_checks[name] = {"ok": code == 0, "needs_vtk": code == 3, "detail": (output + "\n" + error).strip()[-1000:]}
 systemd_code, _, systemd_error = run(["systemctl", "--user", "show-environment"])
+linger_code, linger, _ = run(["loginctl", "show-user", pwd.getpwuid(os.getuid()).pw_name, "-p", "Linger", "--value"])
+linger = linger if linger_code == 0 and linger in {"yes", "no"} else "unknown"
 selected = sys.argv[1]
 requested_root = os.path.abspath(sys.argv[2])
 recommended_root = os.path.join(os.path.expanduser("~"), "BlastUrbanJobs")
@@ -1058,11 +1247,41 @@ except OSError as exc:
 image_check = None
 if selected and docker_code == 0:
     platform_args = ["--platform", sys.argv[4]] if sys.argv[4] else []
+    cache_enabled = sys.argv[5] == "1"
     _, image_platform, _ = run(["docker", "image", "inspect", "--format", "{{.Os}}/{{.Architecture}}", selected])
-    code, output, error = run(
-        ["docker", "run", "--rm", *platform_args, "--entrypoint", "/bin/bash", selected, "-c", container_command]
-    )
-    detail = (output + "\n" + error).strip()[-1000:]
+    image_id_code, image_id, image_id_error = run(["docker", "image", "inspect", "--format", "{{.Id}}", selected])
+    cache_hit = False
+    detail = ""
+    code = image_id_code
+    cache_key = hashlib.sha256(f"{image_id}|{sys.argv[4]}|v1".encode()).hexdigest()[:24]
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "blasturban")
+    cache_path = os.path.join(cache_dir, f"image-{cache_key}.ok.json")
+    if cache_enabled and image_id_code == 0:
+        try:
+            with open(cache_path, encoding="utf-8") as stream:
+                cached = json.load(stream)
+            cache_hit = cached.get("image_id") == image_id and cached.get("platform") == sys.argv[4]
+        except (OSError, ValueError, TypeError):
+            pass
+    if cache_hit:
+        code = 0
+        detail = "readiness cache hit for immutable image ID"
+    elif image_id_code == 0:
+        code, output, error = run(
+            ["docker", "run", "--rm", *platform_args, "--user", "0:0", "--entrypoint", "/bin/bash", selected, "-c", container_command]
+        )
+        detail = (output + "\n" + error).strip()[-1000:]
+        if code == 0 and cache_enabled:
+            os.makedirs(cache_dir, mode=0o700, exist_ok=True)
+            os.chmod(cache_dir, 0o700)
+            fd, temporary = tempfile.mkstemp(prefix=".image-ready-", dir=cache_dir)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump({"image_id": image_id, "platform": sys.argv[4], "check_version": 1}, stream)
+                stream.write("\n")
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, cache_path)
+    else:
+        detail = image_id_error[-1000:]
     if code == 3 and not detail:
         detail = "ไม่พบ Python VTK"
     image_check = {
@@ -1072,6 +1291,8 @@ if selected and docker_code == 0:
         "exit_code": code,
         "platform": image_platform,
         "detail": detail,
+        "cache_hit": cache_hit,
+        "image_id": image_id,
     }
 print(json.dumps({
     "host": socket.gethostname(),
@@ -1087,6 +1308,7 @@ print(json.dumps({
     "container_checks": container_checks,
     "systemd_user_ok": systemd_code == 0,
     "systemd_error": systemd_error[-1000:],
+    "linger": linger,
     "image_check": image_check,
     "remote_root": requested_root,
     "remote_root_ok": root_ok,
@@ -1099,7 +1321,16 @@ PY
         if platform_name not in {"", "linux/amd64", "linux/arm64"}:
             raise ValueError("Docker platform ไม่ถูกต้อง")
         process = _run_remote(
-            connection, script, (selected_image, str(requested_root), IMAGE_READY_CHECK, platform_name), timeout=180
+            connection,
+            script,
+            (
+                selected_image,
+                str(requested_root),
+                IMAGE_READY_CHECK,
+                platform_name,
+                "1" if IMAGE_READY_CACHE_ENABLED else "0",
+            ),
+            timeout=180,
         )
         try:
             result = json.loads(process.stdout)
@@ -1169,6 +1400,8 @@ PY
         safe_pattern = r"[A-Za-z0-9_./:@+-]+"
         if not re.fullmatch(safe_pattern, container):
             raise ValueError("กรุณาเลือก Docker container ที่กำลังรัน")
+        if container.startswith("blasturban-build-"):
+            raise ValueError("Build container ใช้สำหรับติดตั้งเท่านั้น ห้ามใช้เป็น worker หรือสร้าง ready image ผ่าน Web UI")
         if not re.fullmatch(safe_pattern, image):
             raise ValueError("ชื่อ image ใหม่ไม่ถูกต้อง")
         script = r'''
@@ -1250,18 +1483,64 @@ printf 'READY_IMAGE=%s\nIMAGE_ID=%s\n' "$image" "$image_id"
         platform_name = str(data.get("docker_platform", "")).strip()
         if platform_name not in {"", "linux/amd64", "linux/arm64"}:
             raise ValueError("Docker platform ไม่ถูกต้อง")
+        accept_no_linger = data.get("accept_no_linger") is True
+
+        linger_check = _run_remote(
+            connection,
+            r'''
+set -eu
+value=$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || true)
+case "$value" in yes|no) printf '%s\n' "$value" ;; *) printf 'unknown\n' ;; esac
+''',
+            timeout=30,
+        )
+        linger = linger_check.stdout.strip() or "unknown"
+        if linger != "yes" and not accept_no_linger:
+            raise ValueError(
+                f"Server systemd Linger={linger}; ปฏิเสธการส่งงานเพราะงานอาจถูกหยุดเมื่อ logout · "
+                f"ให้ผู้ดูแลรัน sudo loginctl enable-linger {connection[1]} หรือเลือก “ยอมรับความเสี่ยงงานถูกหยุดเมื่อ logout”"
+            )
 
         try:
             _run_remote(
                 connection,
                 r'''
 set -eu
-docker image inspect "$1" >/dev/null
+image=$1 platform=$2 check=$3 cache_enabled=$4
+image_id=$(docker image inspect --format '{{.Id}}' "$image")
+cache_key=$(python3 - "$image_id" "$platform" <<'PY'
+import hashlib, sys
+print(hashlib.sha256(f"{sys.argv[1]}|{sys.argv[2]}|v1".encode()).hexdigest()[:24])
+PY
+)
+cache_dir=$HOME/.cache/blasturban
+cache_path=$cache_dir/image-$cache_key.ok.json
+if [[ $cache_enabled == 1 && -f $cache_path ]]; then
+    printf 'readiness cache hit for %s\n' "$image_id"
+    exit 0
+fi
 platform_args=()
-[[ -z $2 ]] || platform_args=(--platform "$2")
-docker run --rm ${platform_args[@]+"${platform_args[@]}"} --user 0:0 --entrypoint /bin/bash "$1" -c "$3"
+[[ -z $platform ]] || platform_args=(--platform "$platform")
+docker run --rm ${platform_args[@]+"${platform_args[@]}"} --user 0:0 --entrypoint /bin/bash "$image" -c "$check"
+if [[ $cache_enabled == 1 ]]; then
+    install -d -m 0700 "$cache_dir"
+    temporary=$(mktemp "$cache_dir/.image-ready.XXXXXX")
+    python3 - "$temporary" "$image_id" "$platform" <<'PY'
+import json, os, sys
+with open(sys.argv[1], "w", encoding="utf-8") as stream:
+    json.dump({"image_id": sys.argv[2], "platform": sys.argv[3], "check_version": 1}, stream)
+    stream.write("\n")
+os.chmod(sys.argv[1], 0o600)
+PY
+    mv -f "$temporary" "$cache_path"
+fi
 ''',
-                (image, platform_name, IMAGE_READY_CHECK),
+                (
+                    image,
+                    platform_name,
+                    IMAGE_READY_CHECK,
+                    "1" if IMAGE_READY_CACHE_ENABLED else "0",
+                ),
                 timeout=240,
             )
         except ValueError as exc:
@@ -1311,6 +1590,30 @@ if ! mkdir -p -- "$root" 2>/dev/null || [[ ! -w $root || ! -x $root ]]; then
     }
 fi
 candidate="$root/$name"
+if [[ -d $candidate && ! -L $candidate ]]; then
+    existing_state=$(python3 - "$candidate/server-job-status.json" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        value = json.load(stream)
+    print(value.get("state", "") if isinstance(value, dict) else "")
+except (OSError, ValueError, TypeError):
+    pass
+PY
+)
+    existing_unit=""
+    [[ ! -f $candidate/server-job-unit.txt ]] || existing_unit=$(<"$candidate/server-job-unit.txt")
+    unit_active=false
+    if [[ -n $existing_unit && $existing_unit =~ ^[A-Za-z0-9_.@:-]+$ ]] \
+        && systemctl --user is-active --quiet "$existing_unit" 2>/dev/null; then
+        unit_active=true
+    fi
+    if [[ $existing_state == queued || $existing_state == running || $existing_state == postprocessing || $unit_active == true ]]; then
+        printf 'งานชื่อ %s กำลังทำงานอยู่ (state=%s unit=%s); ปฏิเสธการส่งซ้ำ\n' \
+            "$name" "${existing_state:-unknown}" "${existing_unit:-none}" >&2
+        exit 17
+    fi
+fi
 suffix=$(date +%Y%m%d-%H%M%S)
 counter=0
 while ! mkdir -- "$candidate" 2>/dev/null; do
@@ -1342,29 +1645,63 @@ printf '%s\n%s\n' "$root" "$candidate"
             raise ValueError("Server ส่งตำแหน่ง Case ที่ไม่ถูกต้องกลับมา")
         actual_case_name = safe_case_name(remote_case.name)
         host, user, port, key = connection
-        ssh_shell = shlex.join(
-            ["ssh", "-i", str(key), "-p", str(port), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
-        )
+        ssh_shell = shlex.join(_ssh_transport_args(host, user, port, key))
+        transfer_started = time.monotonic()
         transfer = subprocess.run(
             [
-                "rsync", "-az", "--partial", "--human-readable", "--exclude-from", str(exclude_file),
+                "rsync", "-az", "--partial", "--stats", "--exclude-from", str(exclude_file),
                 "-e", ssh_shell, str(local_case) + "/", f"{user}@{host}:{remote_case}/",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env={**os.environ, "LC_ALL": "C"},
             timeout=1800,
             check=False,
         )
+        transfer_seconds = max(0.001, time.monotonic() - transfer_started)
         if transfer.returncode:
             raise ValueError(
                 f"ส่ง case ด้วย rsync ไม่สำเร็จ (โฟลเดอร์บน Server ที่สร้างไว้และยังไม่ได้เริ่มงาน: {remote_case}): "
                 + transfer.stderr[-2000:]
             )
+        transferred_match = re.search(
+            r"Total transferred file size:\s*([0-9,]+) (?:bytes|B)", transfer.stdout
+        )
+        transferred_bytes = int(transferred_match.group(1).replace(",", "")) if transferred_match else None
+        transfer_mib_s = (
+            transferred_bytes / (1024 * 1024) / transfer_seconds
+            if transferred_bytes is not None
+            else None
+        )
+        # An older generated case can contain a stale exporter even when all
+        # required files exist. Overlay only trusted orchestration/export
+        # assets in the newly allocated remote job, then verify every byte on
+        # the server before allowing submit. The selected local case remains
+        # unchanged and no CFD input or generated Allrun/preflight is touched.
+        with tempfile.TemporaryDirectory(prefix="runtime-assets-", dir=STATE.upload_dir) as stage:
+            runtime_hashes = stage_trusted_runtime_assets(Path(stage))
+            runtime_transfer = subprocess.run(
+                [
+                    "rsync", "-az", "--checksum", "--partial",
+                    "-e", ssh_shell, str(Path(stage)) + "/", f"{user}@{host}:{remote_case}/",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env={**os.environ, "LC_ALL": "C"},
+                timeout=300,
+                check=False,
+            )
+        if runtime_transfer.returncode:
+            raise ValueError(
+                f"อัปเดต runtime/export assets บน Server ไม่สำเร็จ "
+                f"(งานยังไม่เริ่ม: {remote_case}): " + runtime_transfer.stderr[-2000:]
+            )
         submit_script = r'''
 set -eu
-case_dir=$1 image=$2 cores=$3 memory=$4 platform=$5
-shift 5
+case_dir=$1 image=$2 cores=$3 memory=$4 platform=$5 accept_no_linger=$6
+shift 6
 cd -- "$case_dir"
 missing=""
 for required in "$@"; do
@@ -1376,13 +1713,42 @@ if [[ -n $missing ]]; then
     printf 'rsync ส่งไฟล์ไม่ครบ ขาด:%s\n' "$missing" >&2
     exit 1
 fi
-chmod +x server-docker-job.sh makeWebResults.sh preflight.sh Allrun organizeSurfaceCheckOutput.sh
-./server-docker-job.sh submit "$image" "$cores" "$memory" "$platform"
+python3 - <<'PY'
+import hashlib
+import json
+from pathlib import Path
+
+case = Path.cwd().resolve()
+manifest_path = case / "blasturban-runtime-assets.json"
+with manifest_path.open(encoding="utf-8") as stream:
+    manifest = json.load(stream)
+assets = manifest.get("assets")
+if manifest.get("schema_version") != 1 or not isinstance(assets, dict) or not assets:
+    raise SystemExit("trusted runtime manifest is invalid")
+for relative_name, expected in assets.items():
+    path = case / relative_name
+    if path.is_symlink() or not path.is_file() or case not in path.resolve().parents:
+        raise SystemExit(f"unsafe or missing trusted runtime asset: {relative_name}")
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != expected:
+        raise SystemExit(f"trusted runtime asset checksum mismatch: {relative_name}")
+print(f"verified {len(assets)} trusted runtime assets")
+PY
+chmod +x server-run-auto.sh server-docker-job.sh makeWebResults.sh runBlastToVTKIsolated.sh preflight.sh Allrun organizeSurfaceCheckOutput.sh
+./server-docker-job.sh submit "$image" "$cores" "$memory" "$platform" "$accept_no_linger"
 '''
         process = _run_remote(
             connection,
             submit_script,
-            (str(remote_case), image, str(cores), str(memory), platform_name, *REQUIRED_CASE_FILES),
+            (
+                str(remote_case),
+                image,
+                str(cores),
+                str(memory),
+                platform_name,
+                "true" if accept_no_linger else "false",
+                *REQUIRED_CASE_FILES,
+            ),
             timeout=120,
         )
         self._json(
@@ -1395,6 +1761,10 @@ chmod +x server-docker-job.sh makeWebResults.sh preflight.sh Allrun organizeSurf
                 "unit": process.stdout.strip().splitlines()[-1],
                 "cores": cores,
                 "core_mode": core_mode,
+                "transfer_seconds": round(transfer_seconds, 3),
+                "transferred_bytes": transferred_bytes,
+                "transfer_mib_s": round(transfer_mib_s, 3) if transfer_mib_s is not None else None,
+                "runtime_assets_refreshed": len(runtime_hashes),
                 "message": (
                     "ส่งเคสและเริ่มงานผ่าน systemd/Docker แล้ว"
                     if actual_root == root
@@ -1542,19 +1912,14 @@ fi
             (str(remote_case),),
         ).stdout.strip().splitlines()[-1:]
         remote_state = gate[0] if gate else ""
-        if remote_state in {"queued", "running", "postprocessing"}:
-            raise ValueError(f"งานยังทำงานอยู่ (สถานะ {remote_state}) จึงยังดึงผลไม่ได้")
-        if remote_state in {"failed", "viewer_failed", "stopped", "not_submitted", "not_found"}:
-            raise ValueError(f"ไม่ดึงผลจากงานสถานะ {remote_state}; อ่าน Log เพื่อดูสาเหตุ")
+        validate_fetch_state(remote_state)
         destination = local_parent / case_name
         destination.mkdir(parents=True, exist_ok=True)
         # Mirror (delete stale files) only inside a folder this tool created,
         # never inside a user-chosen folder that may hold other data.
         marker = destination / ".blasturban-results"
         mirror_flags = ["--delete", "--exclude", marker.name] if marker.is_file() else []
-        ssh_shell = shlex.join(
-            ["ssh", "-i", str(key), "-p", str(port), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
-        )
+        ssh_shell = shlex.join(_ssh_transport_args(host, user, port, key))
         transfer = subprocess.run(
             ["rsync", "-az", "--partial", *mirror_flags, "--human-readable", "-e", ssh_shell,
              f"{user}@{host}:{remote_case}/results-web/", str(destination) + "/"],
@@ -1595,6 +1960,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 root = os.path.realpath(sys.argv[1])
 jobs = []
@@ -1604,17 +1970,25 @@ if os.path.isdir(root):
             continue
         status = {}
         status_path = os.path.join(entry.path, "server-job-status.json")
+        status_present = os.path.isfile(status_path)
         try:
             with open(status_path, encoding="utf-8") as stream:
                 status = json.load(stream)
         except (OSError, ValueError, TypeError):
             pass
-        size_kib = 0
-        measured = subprocess.run(
-            ["du", "-sk", "--", entry.path], text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
-        )
-        if measured.returncode == 0:
+        if not isinstance(status, dict):
+            status = {}
+        size_kib = int(status.get("size_bytes", 0) or 0) // 1024
+        size_timed_out = False
+        try:
+            measured = subprocess.run(
+                ["du", "-sk", "--", entry.path], text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=2,
+            )
+        except subprocess.TimeoutExpired:
+            measured = None
+            size_timed_out = True
+        if measured is not None and measured.returncode == 0:
             try:
                 size_kib = int(measured.stdout.split()[0])
             except (ValueError, IndexError):
@@ -1622,24 +1996,39 @@ if os.path.isdir(root):
         modified = entry.stat(follow_symlinks=False).st_mtime
         state = str(status.get("state", "ยังไม่เริ่ม"))
         message = str(status.get("message", ""))
-        active = state in {"queued", "running", "postprocessing"}
-        if active:
-            # Never trust the status file alone: confirm the systemd unit lives.
+        try:
+            with open(os.path.join(entry.path, "server-job-unit.txt"), encoding="utf-8") as stream:
+                unit = stream.read().strip()
+        except OSError:
+            unit = ""
+        unit_alive = False
+        if unit and all(c.isalnum() or c in "_.@:-" for c in unit):
             try:
-                with open(os.path.join(entry.path, "server-job-unit.txt"), encoding="utf-8") as stream:
-                    unit = stream.read().strip()
-            except OSError:
-                unit = ""
-            if unit and all(c.isalnum() or c in "_.@:-" for c in unit):
-                try:
-                    unit_alive = subprocess.run(
-                        ["systemctl", "--user", "is-active", "--quiet", unit], check=False
-                    ).returncode == 0
-                except OSError:
-                    unit_alive = True  # cannot verify; keep the reported state
-                if not unit_alive:
-                    state, active = "failed", False
-                    message = f"systemd unit {unit} ไม่ทำงานแล้วแต่สถานะยังเป็น {status.get('state')}; กด ‘ดูสถานะ’ เพื่อบันทึกสถานะที่ถูกต้อง"
+                unit_alive = subprocess.run(
+                    ["systemctl", "--user", "is-active", "--quiet", unit], check=False,
+                    timeout=3,
+                ).returncode == 0
+            except (OSError, subprocess.TimeoutExpired):
+                unit_alive = state in {"queued", "running", "postprocessing"}
+        try:
+            empty = next(os.scandir(entry.path), None) is None
+        except OSError:
+            empty = False
+        if unit_alive:
+            classification = "active"
+        elif not status_present or empty or not unit:
+            classification = "orphan"
+        elif state == "complete":
+            classification = "finished"
+        elif state in {"failed", "viewer_failed"}:
+            classification = "failed"
+        elif state == "stopped":
+            classification = "stopped"
+        else:
+            classification = "orphan"
+        active = classification == "active"
+        if state in {"queued", "running", "postprocessing"} and not unit_alive:
+            message = f"systemd unit {unit or '(missing)'} ไม่ทำงานแล้วแต่ status ยังเป็น {state}"
         jobs.append({
             "name": entry.name,
             "state": state,
@@ -1647,8 +2036,15 @@ if os.path.isdir(root):
             "updated": str(status.get("updated_utc", datetime.datetime.fromtimestamp(
                 modified, datetime.timezone.utc).isoformat())),
             "size_bytes": size_kib * 1024,
+            "size_timed_out": size_timed_out,
             "has_web_result": os.path.isfile(os.path.join(entry.path, "results-web", "blast3D.html")),
             "active": active,
+            "classification": classification,
+            "age_seconds": max(0, int(time.time() - modified)),
+            "unit": unit,
+            "unit_active": unit_alive,
+            "status_present": status_present,
+            "empty": empty,
         })
 jobs.sort(key=lambda item: item["updated"], reverse=True)
 usage = shutil.disk_usage(root if os.path.isdir(root) else os.path.dirname(root) or "/")
@@ -1670,21 +2066,26 @@ PY
         data = self._read_json()
         connection = _server_connection(data)
         root = _remote_root(data)
+        image = str(data.get("docker_image", "")).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_./:@+-]+", image):
+            raise ValueError("กรุณาเลือก Docker image เพื่อซ่อม ownership ก่อนลบงาน")
         requested = str(data.get("cleanup_case_name", "")).strip()
         case_name = safe_case_name(requested)
         if requested != case_name:
             raise ValueError("ชื่องานที่เลือกไม่ถูกต้อง")
         script = r'''
 set -eu
-python3 - "$1" "$2" <<'PY'
+python3 - "$1" "$2" "$3" <<'PY'
 import json
 import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 
 root = os.path.realpath(sys.argv[1])
 name = sys.argv[2]
+image = sys.argv[3]
 target = os.path.realpath(os.path.join(root, name))
 if os.path.dirname(target) != root or os.path.basename(target) != name:
     raise SystemExit("refusing path outside the configured job folder")
@@ -1694,8 +2095,10 @@ state = ""
 try:
     with open(os.path.join(target, "server-job-status.json"), encoding="utf-8") as stream:
         state = str(json.load(stream).get("state", ""))
-except (OSError, ValueError, TypeError):
+except (OSError, ValueError, TypeError, AttributeError):
     pass
+if not isinstance(state, str):
+    state = ""
 unit_active = False
 try:
     with open(os.path.join(target, "server-job-unit.txt"), encoding="utf-8") as stream:
@@ -1708,11 +2111,74 @@ except OSError:
     pass
 if state in {"queued", "running", "postprocessing"} or unit_active:
     raise SystemExit("งานยังทำงานอยู่ กรุณาหยุดงานและรอให้หยุดก่อนลบ")
-shutil.rmtree(target)
+audit_path = os.path.join(root, ".blasturban-delete-audit.jsonl")
+def audit(event, error=""):
+    record = {
+        "event": event,
+        "job": name,
+        "previous_state": state,
+        "recorded_utc": datetime.now(timezone.utc).isoformat(),
+        "method": "delete-job",
+    }
+    if error:
+        record["error"] = error
+    with open(audit_path, "a", encoding="utf-8") as stream:
+        stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.chmod(audit_path, 0o600)
+audit("delete_started")
+
+# Docker workers run as root because the OpenFOAM installation lives under
+# /root.  The runner normally restores host ownership in its EXIT trap, but a
+# killed worker or a manually launched recovery container can leave root-owned
+# directories behind.  Repair only the validated job subtree, using the image
+# already selected and readiness-checked by the UI.  This happens before
+# rmtree so a failed repair cannot cause another partial deletion.
+blocked = []
+for current, directories, _ in os.walk(target, topdown=True, followlinks=False):
+    if not os.access(current, os.W_OK | os.X_OK):
+        blocked.append(current)
+        directories[:] = []
+if blocked:
+    inspect = subprocess.run(
+        ["docker", "image", "inspect", image],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, check=False,
+    )
+    if inspect.returncode:
+        message = f"Docker image สำหรับซ่อม ownership ไม่มีบน Server: {image}"
+        audit("permission_repair_failed", message)
+        raise SystemExit(message)
+    mounted_paths = []
+    for path in blocked:
+        relative = os.path.relpath(path, target)
+        mounted_paths.append("/case" if relative == "." else "/case/" + relative)
+    audit("permission_repair_started")
+    repair = subprocess.run(
+        [
+            "docker", "run", "--rm", "--pull=never", "--network=none",
+            "--pids-limit=64", "--memory=128m", "--cpus=0.25",
+            "--user=0:0", "--volume", f"{target}:/case",
+            "--entrypoint=/bin/chown", image, "-R", f"{os.getuid()}:{os.getgid()}",
+            *mounted_paths,
+        ],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, check=False,
+    )
+    if repair.returncode:
+        message = "ซ่อม ownership ก่อนลบไม่สำเร็จ: " + repair.stderr[-1000:]
+        audit("permission_repair_failed", message)
+        raise SystemExit(message)
+    audit("permissions_repaired")
+try:
+    shutil.rmtree(target)
+except Exception as exc:
+    audit("delete_failed", str(exc))
+    raise
+audit("deleted")
 print(json.dumps({"deleted": name, "state": state}, ensure_ascii=False))
 PY
 '''
-        process = _run_remote(connection, script, (str(root), case_name), timeout=180)
+        process = _run_remote(connection, script, (str(root), case_name, image), timeout=600)
         result = json.loads(process.stdout)
         self._json(200, {"ok": True, **result})
 
@@ -1731,16 +2197,16 @@ set -eu
 python3 - "$1" "$2" <<'PY'
 import json
 import os
-import shutil
+import subprocess
 import sys
 import time
 
 root = os.path.realpath(sys.argv[1])
 days = int(sys.argv[2])
 cutoff = time.time() - days * 86400
-terminal = {"complete", "failed", "viewer_failed", "stopped"}
-deleted = []
-kept = []
+terminal = {"complete": "finished", "failed": "failed", "viewer_failed": "failed", "stopped": "stopped"}
+candidates = []
+kept_count = 0
 if os.path.isdir(root):
     for entry in os.scandir(root):
         if not entry.is_dir(follow_symlinks=False):
@@ -1751,13 +2217,50 @@ if os.path.isdir(root):
                 status = json.load(stream)
         except (OSError, ValueError, TypeError):
             pass
+        if not isinstance(status, dict):
+            status = {}
         state = str(status.get("state", ""))
-        if state in terminal and entry.stat(follow_symlinks=False).st_mtime < cutoff:
-            shutil.rmtree(entry.path)
-            deleted.append(entry.name)
+        try:
+            with open(os.path.join(entry.path, "server-job-unit.txt"), encoding="utf-8") as stream:
+                unit = stream.read().strip()
+        except OSError:
+            unit = ""
+        unit_active = False
+        if unit and all(c.isalnum() or c in "_.@:-" for c in unit):
+            try:
+                unit_active = subprocess.run(
+                    ["systemctl", "--user", "is-active", "--quiet", unit],
+                    check=False, timeout=3,
+                ).returncode == 0
+            except (OSError, subprocess.TimeoutExpired):
+                unit_active = True
+        modified = entry.stat(follow_symlinks=False).st_mtime
+        classification = terminal.get(state, "orphan" if not status or not unit else "other")
+        old_terminal = classification in {"finished", "failed", "stopped"} and modified < cutoff
+        stale_orphan = classification == "orphan"
+        if not unit_active and (old_terminal or stale_orphan):
+            reason = (
+                "orphan; missing status/unit or empty; unit inactive"
+                if stale_orphan
+                else f"{classification}; older than {days} days; unit inactive"
+            )
+            candidates.append({
+                "name": entry.name,
+                "classification": classification,
+                "state": state or "ไม่มี status",
+                "age_seconds": max(0, int(time.time() - modified)),
+                "unit": unit,
+                "reason": reason,
+            })
         else:
-            kept.append(entry.name)
-print(json.dumps({"deleted": deleted, "kept_count": len(kept), "days": days}, ensure_ascii=False))
+            kept_count += 1
+print(json.dumps({
+    "dry_run": True,
+    "candidates": candidates,
+    "kept_count": kept_count,
+    "days": days,
+    "message": "ยังไม่ได้ลบ; ให้เลือกและยืนยันผ่าน delete-job ทีละงาน",
+}, ensure_ascii=False))
 PY
 '''
         process = _run_remote(connection, script, (str(root), str(days)), timeout=600)

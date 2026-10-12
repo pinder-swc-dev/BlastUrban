@@ -1,0 +1,22 @@
+ARG BASE_IMAGE=blasturban/blastfoam9:of9-ready
+FROM ${BASE_IMAGE}
+
+LABEL org.blasturban.component="blastToVTK" \
+      org.blasturban.fix="mpi-master-output-and-fresh-dynamic-mesh"
+
+SHELL ["/bin/bash", "-c"]
+
+COPY blastToVTK.C /tmp/blastToVTK.C
+
+RUN set +e; \
+    set +u; \
+    source /root/OpenFOAM/OpenFOAM-9/etc/bashrc; \
+    source /root/OpenFOAM/blastfoam/etc/bashrc; \
+    set -e; \
+    install -m 0644 /tmp/blastToVTK.C \
+        /root/OpenFOAM/blastfoam/applications/utilities/blastToVTK/blastToVTK.C; \
+    cd /root/OpenFOAM/blastfoam/applications/utilities/blastToVTK; \
+    wmake; \
+    test -x "$BLAST_APPBIN/blastToVTK"; \
+    "$BLAST_APPBIN/blastToVTK" -help >/dev/null; \
+    rm -f /tmp/blastToVTK.C
