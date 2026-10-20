@@ -7,7 +7,10 @@
 | ต้องการทำอะไร | อ่านเอกสาร |
 | --- | --- |
 | เข้าใจสถาปัตยกรรมปัจจุบันและเป้าหมาย | [Architecture](../ARCHITECTURE.md) |
+| ดู feature ของ blastFoam ที่เปิดใช้ผ่าน Case Builder | [blastFoam feature matrix](BLASTFOAM_FEATURE_MATRIX.md) |
 | ดูผลตรวจ repository, gap และความเสี่ยง | [Project audit](PROJECT_AUDIT.md) |
+| ตรวจรายการไฟล์ที่เสนอให้ลบก่อนยืนยัน | [Cleanup proposal](CLEANUP_PROPOSAL.md) |
+| อ่านเหตุผลเรื่อง Linger และ SSH reuse | [ADR 0001](adr/0001-linger-and-ssh-connection-reuse.md) |
 | ติดตั้งบน Ubuntu, WSL2, `.deb` หรือ Docker | [การติดตั้ง](INSTALLATION_TH.md) |
 | เตรียม case, เริ่มคำนวณ, ดูสถานะ และอ่านผล | [การใช้งาน](USAGE_TH.md) |
 | แก้ geometry, case settings, solver หรือ library | [การพัฒนาและแก้ไขโค้ด](DEVELOPMENT_TH.md) |

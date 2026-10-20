@@ -292,6 +292,19 @@ delay ของตัวเอง ระบบสร้าง `sphericalMassToCe
 หน้าหลักซ่อน Domain/Mesh, time step, probes และรายละเอียด SSH/Docker ไว้ในเมนู
 ตั้งค่าเพิ่มเติม ค่าทั้งหมดที่เคยมีอยู่ยังแก้ได้ตามเดิม
 
+ในเมนู Time step เพิ่มเติมสามารถเลือก feature ของ blastFoam ที่ตรวจจาก source
+รุ่นนี้แล้ว ได้แก่ flux `Tadmor`, `Kurganov`, `HLLC`, `AUSM+`, time integrator
+`RK1SSP` ถึง `RK4SSP` และ spatial reconstruction ลำดับ 2 (van Albada) หรือลำดับ 3
+(`quadraticMUSCL Minmod`) ค่าเริ่มต้นยังเป็น `Tadmor + RK2SSP + order 2` ตาม
+workshop ที่ยอมรับไว้ การเปลี่ยนตัวเลือกจะตั้ง performance profile เป็น Custom,
+บันทึกลง `case-builder.json` และเขียนลง `system/fvSchemes` ของ Case ใหม่จริง
+ไม่ใช่เพียงเปลี่ยนข้อความบน UI ต้องทำ mesh/time-step convergence ก่อนใช้ผลทางวิศวกรรม
+
+AMR, multi-point detonation และ MPI เปิดใช้อยู่แล้ว ส่วน arbitrary EOS และ afterburn
+`constant`/`linear`/`Miller` เป็น capability ของ solver แต่ยังไม่เปิดใน Weapon workflow
+จนกว่าจะมี material coefficients, provenance และ free-field validation ครบตาม
+`docs/BLASTFOAM_FEATURE_MATRIX.md`
+
 หน้า User ใช้ SSH + rsync ส่ง Case โดยตรงและไม่ใช้ Git เก็บผลคำนวณขนาดใหญ่
 เครื่องมือ `tools/remote-dev` ยังคงมีไว้สำหรับผู้พัฒนาที่ต้องการ workflow แบบ CLI
 

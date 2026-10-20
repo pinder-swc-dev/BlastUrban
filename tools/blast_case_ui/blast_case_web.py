@@ -134,18 +134,56 @@ class AppState:
         with self.lock:
             masters = list(self.ssh_masters.items())
             self.ssh_masters.clear()
-        for (host, user, port, key), socket_path in masters:
-            subprocess.run(
-                [
-                    "ssh", "-i", key, "-p", str(port), "-S", str(socket_path),
-                    "-O", "exit", f"{user}@{host}",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=5,
-                check=False,
-            )
-        shutil.rmtree(self.upload_dir, ignore_errors=True)
+        # Closing a dead or unreachable SSH ControlMaster must never make the
+        # whole Web application appear to hang after Ctrl+C.  Start all exit
+        # requests concurrently and give the complete cleanup one short,
+        # shared deadline instead of waiting up to five seconds per host.
+        processes: List[subprocess.Popen] = []
+        try:
+            for (host, user, port, key), socket_path in masters:
+                try:
+                    processes.append(
+                        subprocess.Popen(
+                            [
+                                "ssh", "-i", key, "-p", str(port),
+                                "-S", str(socket_path), "-O", "exit",
+                                f"{user}@{host}",
+                            ],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                    )
+                except (OSError, KeyboardInterrupt):
+                    break
+
+            deadline = time.monotonic() + 1.0
+            for process in processes:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    process.wait(timeout=remaining)
+                except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                    break
+        finally:
+            for process in processes:
+                try:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=0.1)
+                except (OSError, subprocess.TimeoutExpired, KeyboardInterrupt):
+                    pass
+            for _identity, socket_path in masters:
+                try:
+                    socket_path.unlink(missing_ok=True)
+                except (OSError, KeyboardInterrupt):
+                    pass
+            try:
+                shutil.rmtree(self.upload_dir, ignore_errors=True)
+            except KeyboardInterrupt:
+                # A second Ctrl+C means "stop now"; cleanup is best effort and
+                # ControlPersist will terminate any surviving master itself.
+                pass
 
     def ssh_control_path(self, host: str, user: str, port: int, key: Path) -> Path:
         identity = f"{user}@{host}:{port}|{key}"
@@ -560,6 +598,9 @@ def payload_to_config(data: Dict[str, Any]) -> CaseConfig:
         output_binary=bool(data.get("binary", True)),
         allow_surface_errors=bool(data.get("allow_surface_errors", False)),
         performance_profile=str(data.get("performance_profile", "fast")),
+        flux_scheme=str(data.get("flux_scheme", "Tadmor")),
+        time_integrator=str(data.get("time_integrator", "RK2SSP")),
+        spatial_order=int(data.get("spatial_order", 2)),
     )
 
 

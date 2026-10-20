@@ -871,6 +871,12 @@ class CaseConfig:
     output_binary: bool = True
     allow_surface_errors: bool = False
     performance_profile: str = "fast"
+    # blastFoam numerical features. Defaults reproduce the accepted workshop
+    # template; alternatives are restricted to runtime types compiled in this
+    # repository and demonstrated by its tutorials/validation cases.
+    flux_scheme: str = "Tadmor"
+    time_integrator: str = "RK2SSP"
+    spatial_order: int = 2
 
     @property
     def domain(self) -> Bounds:
@@ -1012,6 +1018,12 @@ def validate_config(config: CaseConfig, report: Optional[StlReport] = None, insp
         errors.append("MPI ranks ต้องไม่น้อยกว่า 1")
     if config.performance_profile not in {"fast", "quality", "custom"}:
         errors.append("performance profile ต้องเป็น fast, quality หรือ custom")
+    if config.flux_scheme not in {"HLLC", "AUSM+", "Kurganov", "Tadmor"}:
+        errors.append("flux scheme ต้องเป็น HLLC, AUSM+, Kurganov หรือ Tadmor")
+    if config.time_integrator not in {"RK1SSP", "RK2SSP", "RK3SSP", "RK4SSP"}:
+        errors.append("time integrator ต้องเป็น RK1SSP, RK2SSP, RK3SSP หรือ RK4SSP")
+    if config.spatial_order not in {2, 3}:
+        errors.append("spatial order ต้องเป็น 2 หรือ 3")
     if not config.domain.contains(config.location_in_mesh):
         errors.append("locationInMesh อยู่นอก domain")
     sources = config.effective_sources
@@ -1305,6 +1317,37 @@ def _phase_properties(config: CaseConfig, template: Path) -> str:
         "        ); // generated activation delays [s]",
         "initiation points",
     )
+    return text
+
+
+def _fv_schemes(config: CaseConfig, template: Path) -> str:
+    """Apply only blastFoam runtime types proven by this source tree.
+
+    Second order retains the accepted van-Albada workshop reconstruction.
+    Third order uses the quadratic MUSCL + Minmod combination present in the
+    bundled building3D and validation cases.
+    """
+    text = (template / "system/fvSchemes").read_text(encoding="utf-8")
+    text = _replace_once(
+        text,
+        r"(?m)^\s*fluxScheme\s+[^;]+;",
+        f"fluxScheme      {config.flux_scheme};",
+        "fluxScheme",
+    )
+    text = _replace_once(
+        text,
+        r"(?m)^\s*timeIntegrator\s+[^;]+;",
+        f"    timeIntegrator  {config.time_integrator};",
+        "timeIntegrator",
+    )
+    if config.spatial_order == 3:
+        text, count = re.subn(
+            r"(?m)^(\s*reconstruct\([^\n)]+\)\s+)[^;]+;",
+            r"\g<1>quadraticMUSCL Minmod;",
+            text,
+        )
+        if count == 0:
+            raise ValueError("Template fvSchemes has no reconstruct entries")
     return text
 
 
@@ -1708,8 +1751,15 @@ def create_case(
         repair_sidecar = Path(config.stl_path).with_suffix(".repair.json")
         if repair_sidecar.is_file():
             shutil.copy2(repair_sidecar, target / "geometry-repair.json")
-        for name in ("fvSchemes", "fvSolution"):
-            shutil.copy2(template / "system" / name, target / "system" / name)
+        lineage_sidecars = (
+            (Path(config.stl_path).parent / "scenario-draft.json", "weapon-scenario-draft.json"),
+            (Path(config.stl_path).with_suffix(".geometry.json"), "weapon-geometry.json"),
+            (Path(config.stl_path).with_suffix(".georeference.json"), "weapon-georeference.json"),
+        )
+        for source, destination in lineage_sidecars:
+            if source.is_file():
+                shutil.copy2(source, target / destination)
+        shutil.copy2(template / "system/fvSolution", target / "system/fvSolution")
         for source in (template / "0").glob("*.orig"):
             shutil.copy2(source, target / "0" / source.name)
 
@@ -1719,6 +1769,7 @@ def create_case(
         (target / "system/setFieldsDict").write_text(_set_fields_dict(config), encoding="utf-8")
         (target / "system/controlDict").write_text(_control_dict(config), encoding="utf-8")
         (target / "system/decomposeParDict").write_text(_decompose_dict(config), encoding="utf-8")
+        (target / "system/fvSchemes").write_text(_fv_schemes(config, template), encoding="utf-8")
         (target / "constant/dynamicMeshDict").write_text(_dynamic_mesh_dict(config), encoding="utf-8")
         (target / "constant/phaseProperties").write_text(_phase_properties(config, template), encoding="utf-8")
         _patch_initial_fields(target, config)

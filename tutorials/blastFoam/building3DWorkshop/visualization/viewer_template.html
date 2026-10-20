@@ -27,6 +27,7 @@
   .check input { accent-color: #70d5ff; }
   .row { display: flex; gap: 7px; align-items: center; }
   .row input[type=number] { min-width: 0; width: 50%; }
+  .row select { width: auto; min-width: 92px; }
   .value { color: #78d6ff; font-size: 19px; font-weight: 650; margin: 5px 0 12px; }
   .legend { height: 12px; border-radius: 6px; background: linear-gradient(90deg,#1854aa,#37c8ef,#ffe565,#fb823a,#d42843); }
   .scale { display: flex; justify-content: space-between; color: #a5bdd0; font-size: 12px; margin-top: 6px; }
@@ -35,19 +36,22 @@
 </style>
 </head>
 <body>
-<header><h1>Air blast 3D</h1><p id="modelLabel"></p><p>ผิวคลื่นระเบิด + ค่า overpressure และ temperature บนผนัง</p></header>
+<header><h1>Air blast 3D Voxel</h1><p id="modelLabel"></p><p>Voxel shell จาก STL และผล overpressure จริง</p></header>
 <main>
   <div class="stage"><canvas id="scene" aria-label="3D air blast visualization"></canvas><div class="badge">ลากเพื่อหมุน · เลื่อนล้อเพื่อซูม</div></div>
   <aside class="panel">
     <div class="group computedOnly" id="focusGroup" hidden><label for="focus">มุมมอง</label><select id="focus"><option value="blast">บริเวณระเบิด</option><option value="town">เมืองทั้งหมด</option></select></div>
-    <div class="group computedOnly"><label for="field">สีบนพื้นผิวผนัง</label><select id="field"><option value="op">Overpressure ขณะนั้น (kPa)</option><option value="opMax">Peak overpressure (kPa)</option><option value="temp">Air temperature ใกล้ผนัง (K)</option></select></div>
-    <div class="group"><label for="wallStyle">การแสดงผิวอาคาร</label><select id="wallStyle"><option value="surface">Surface</option><option value="edges" selected>Surface with Edges</option><option value="hidden">ซ่อน</option></select></div>
-    <div class="group"><label for="waveStyle">การแสดงผิวคลื่นระเบิด</label><select id="waveStyle"><option value="surface">Surface</option><option value="edges" selected>Surface with Edges</option><option value="hidden">ซ่อน</option></select></div>
-    <div class="group computedOnly"><label for="time">เวลาจำลอง</label><div class="value" id="timeValue"></div><input id="time" type="range" min="0" value="0" step="1"><div class="row"><button id="play">เล่น</button><button id="reset">รีเซ็ตมุม</button></div></div>
+    <div class="group computedOnly"><label for="field">สีบนพื้นผิวอาคาร</label><select id="field"><option value="solid" selected>อาคารทึบ — ไม่แสดงเส้น Triangle</option><option value="op">Overpressure ขณะนั้น (kPa)</option><option value="opMax">Peak overpressure (kPa)</option><option value="temp">Air temperature ใกล้ผนัง (K)</option></select></div>
+    <div class="group"><label for="wallStyle">การแสดงอาคาร STL</label><select id="wallStyle"><option value="voxel" selected>Box/Voxel</option><option value="surface">Surface</option><option value="edges">Surface with Edges</option><option value="hidden">ซ่อน</option></select></div>
+    <div class="group"><label for="waveStyle">3D overpressure shell จาก CFD</label><select id="waveStyle"><option value="voxel" selected>Box/Voxel ตาม Overpressure</option><option value="surface">ผิวไล่สี</option><option value="edges">ผิวไล่สีพร้อมเส้นขอบ</option><option value="hidden">ซ่อน</option></select></div>
+    <div class="group computedOnly"><label>Voxel display</label><div class="note" id="voxelStatus"></div></div>
+    <div class="group computedOnly" id="contourLayers"><label>Cartesian cell-box จากผล CFD</label><label class="check"><input id="showGround" type="checkbox" checked>พื้นแนวนอน</label><label class="check"><input id="showX" type="checkbox">ระนาบ X</label><label class="check"><input id="showY" type="checkbox">ระนาบ Y</label><label class="check"><input id="showZ" type="checkbox">ระนาบ Z</label></div>
+    <div class="group computedOnly"><label for="time">เวลาจำลอง</label><div class="value" id="timeValue"></div><input id="time" type="range" min="0" value="0" step="1"><div class="row"><button id="play">เล่น</button><select id="playSpeed" aria-label="ความเร็ว animation"><option value="180">ช้า</option><option value="125" selected>ลื่น 8 fps</option><option value="80">เร็ว</option></select><button id="reset">รีเซ็ตมุม</button></div></div>
     <div class="group computedOnly" id="statsGroup" hidden><label>ค่าสูงสุดจาก patch ผนังทั้งหมด</label><div class="note" id="surfaceStats"></div></div>
-    <div class="group computedOnly"><label>ช่วงสีที่แสดง</label><div class="row"><input id="minimum" type="number" step="any" aria-label="minimum"><input id="maximum" type="number" step="any" aria-label="maximum"></div><div class="legend"></div><div class="scale"><span id="minLabel"></span><span id="maxLabel"></span></div></div>
+    <div class="group computedOnly" id="wallScaleGroup"><label>ช่วงสีบนผนัง</label><div class="row"><input id="minimum" type="number" step="any" aria-label="minimum"><input id="maximum" type="number" step="any" aria-label="maximum"></div><div class="legend"></div><div class="scale"><span id="minLabel"></span><span id="maxLabel"></span></div></div>
+    <div class="group computedOnly" id="contourScaleGroup"><label>Overpressure บน 3D shell และ cell-box (kPa)</label><div class="legend"></div><div class="scale"><span id="contourMin"></span><span id="contourMax"></span></div><p class="note">สีของ shell มาจาก p − ambient บนผิว iso ของ CFD; สีของ cell-box มาจาก pressure slices จริง ค่าเกินช่วงยังอยู่ในผลดิบแต่สีจะถูก clamp ที่ปลายสเกล</p></div>
     <div class="group" id="previewReset" hidden><button id="resetPreview">รีเซ็ตมุม</button></div>
-    <p class="note" id="description">เปลือกสีฟ้าคือ isosurface ของความดัน (p) ตามค่า iso ที่ตั้งใน controlDict จากผลจำลอง ไม่ใช่ควันจริง สีผนังใช้ค่าของอากาศที่ขอบผนัง อุณหภูมิเนื้อวัสดุผนังต้องใช้แบบจำลองความร้อนในของแข็ง</p>
+    <p class="note" id="description">อาคารเป็น surface voxel ที่ quantize จาก STL จริง และคลื่นเป็น surface voxel จาก pressure iso-surface จริง สีมาจาก p − ambient ของ blastFoam ทั้งหมดเป็นชั้นแสดงผล ไม่ใช่ mesh ที่ solver ใช้และไม่ใช่ geometry จำลอง</p>
   </aside>
 </main>
 <script>
@@ -55,7 +59,14 @@ const data = __BLAST_DATA__;
 document.getElementById('modelLabel').textContent = data.model;
 const isoLabel = data.waveIsoKPa != null ? `p = ${data.waveIsoKPa.toLocaleString()} kPa (absolute)` : 'p iso';
 if (data.waveIsoKPa != null) document.getElementById('description').textContent = document.getElementById('description').textContent.replace('ตามค่า iso ที่ตั้งใน controlDict', `ที่ ${data.waveIsoKPa.toLocaleString()} kPa (ความดันสัมบูรณ์ ไม่ใช่ overpressure)`);
-if (data.blastCenter) document.getElementById('focusGroup').hidden = false;
+const configuredSources = data.blastSources || (data.blastCenters || []).map(centre=>({centre,mass:null,delay:0}));
+if (data.blastCenter) {
+  const focus=document.getElementById('focus');focus.textContent='';
+  const all=document.createElement('option');all.value='blast';all.textContent=configuredSources.length>1?'Sources ทั้งหมด':'บริเวณระเบิด';focus.appendChild(all);
+  if(configuredSources.length>1)configuredSources.forEach((source,index)=>{const option=document.createElement('option');option.value=`source:${index}`;option.textContent=`Source ${index+1}`;focus.appendChild(option);});
+  const town=document.createElement('option');town.value='town';town.textContent='เมืองทั้งหมด';focus.appendChild(town);
+  document.getElementById('focusGroup').hidden = false;
+}
 if (data.frames[0].stats) document.getElementById('statsGroup').hidden = false;
 if (data.preview) {
   document.querySelectorAll('.computedOnly').forEach(element => element.hidden = true);
@@ -63,19 +74,34 @@ if (data.preview) {
   document.getElementById('description').textContent = 'สีเทาคืออาคารที่ซ่อมแล้ว กรอบสีเหลืองคือ Domain ของ mesh ภาพนี้ยังไม่มีผล overpressure หรือ temperature; ต้องรัน solver เคสเมืองก่อนจึงจะได้ค่าบนผิว';
 }
 const canvas = document.getElementById('scene');
-const ctx = canvas.getContext('2d', {alpha: false});
+const ctx = canvas.getContext('2d', {alpha: false, desynchronized: true});
 const controls = {
   field: document.getElementById('field'), time: document.getElementById('time'),
   wallStyle: document.getElementById('wallStyle'), waveStyle: document.getElementById('waveStyle'),
   min: document.getElementById('minimum'), max: document.getElementById('maximum'),
   timeValue: document.getElementById('timeValue'), minLabel: document.getElementById('minLabel'),
-  maxLabel: document.getElementById('maxLabel'), play: document.getElementById('play')
+  maxLabel: document.getElementById('maxLabel'), play: document.getElementById('play'),
+  playSpeed: document.getElementById('playSpeed'),
+  showGround: document.getElementById('showGround'), showX: document.getElementById('showX'),
+  showY: document.getElementById('showY'), showZ: document.getElementById('showZ')
 };
+if(!data.modelVoxels)controls.wallStyle.value='surface';
+if(!data.frames.some(frame=>frame.waveVoxels))controls.waveStyle.value='surface';
 controls.time.max = data.frames.length - 1;
 const defaults = data.ranges || {op: [0, 100], opMax: [0, 200], temp: [300, 1500]};
-let yaw = -0.65, pitch = 0.72, zoom = 1, dragging = false, lastX = 0, lastY = 0, timer = null;
+let yaw = -0.65, pitch = 0.72, zoom = 1, dragging = false, lastX = 0, lastY = 0;
+let playbackRequest = null, playbackLast = 0, renderRequest = null;
 let viewCenter = data.blastCenter || data.center, viewRadius = data.blastRadius || data.radius;
+const MAX_VOXEL_IMAGES = 16;
+const voxelImages = new Map();
 const stops = [[24,84,170],[55,200,239],[255,229,101],[251,130,58],[212,40,67]];
+const contourRange = data.contourRange || [-50,50];
+document.getElementById('contourMin').textContent=contourRange[0];
+document.getElementById('contourMax').textContent=contourRange[1];
+const modelVoxelText=data.modelVoxels
+  ? `อาคาร ${data.modelVoxels.cells.length.toLocaleString()} boxes · ${data.modelVoxels.size.toLocaleString()} m${data.modelVoxels.adaptive?' (LOD จากเพดานจำนวนกล่อง)':''}`
+  : 'ผลรุ่นเก่า: ไม่มี STL voxel';
+document.getElementById('voxelStatus').textContent=modelVoxelText;
 
 function palette(value, low, high, light=1) {
   const t = Math.max(0, Math.min(1, (value-low) / Math.max(high-low, 1e-9))) * 4;
@@ -83,9 +109,13 @@ function palette(value, low, high, light=1) {
   return stops[index].map((n, j) => Math.round((n*(1-a)+stops[index+1][j]*a)*light));
 }
 function resize() {
-  const rect = canvas.getBoundingClientRect(), ratio = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect(), ratio = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.round(rect.width * ratio); canvas.height = Math.round(rect.height * ratio);
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0); render();
+}
+function scheduleRender() {
+  if (renderRequest !== null) return;
+  renderRequest=requestAnimationFrame(()=>{renderRequest=null;render();});
 }
 function project(point, width, height) {
   const dx = point[0]-viewCenter[0], dy = point[1]-viewCenter[1], dz = point[2]-viewCenter[2];
@@ -125,16 +155,29 @@ function drawDomain(width, height) {
     ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
   }
 }
+function drawConfiguredSources(width,height) {
+  for(let index=0;index<configuredSources.length;index++){
+    const source=configuredSources[index],point=source.centre;if(!point)continue;
+    const p=project(point,width,height);if(!p)continue;
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.PI/4);ctx.fillStyle='#ff9d2e';ctx.strokeStyle='#ffe0a3';ctx.lineWidth=1.5;ctx.fillRect(-4,-4,8,8);ctx.strokeRect(-4,-4,8,8);ctx.restore();
+    const mass=source.mass!==null&&source.mass!==undefined&&Number.isFinite(Number(source.mass))?` · ${Number(source.mass).toLocaleString()} kg`:'';
+    const delay=Number(source.delay)>0?` · delay ${(Number(source.delay)*1000).toLocaleString()} ms`:'';
+    ctx.fillStyle='#ffe0a3';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(`S${index+1}${mass}${delay}`,p.x+8,p.y-7);
+  }
+}
 function addTriangles(items, mesh, isWave, field, low, high, width, height) {
   const style=isWave ? controls.waveStyle.value : controls.wallStyle.value;
-  if (style==='hidden') return;
+  if (style==='hidden'||style==='voxel') return;
   const projected = mesh.points.map(p => project(p,width,height));
   for (let i=0; i<mesh.faces.length; i++) {
     const ids=mesh.faces[i], a=projected[ids[0]], b=projected[ids[1]], c=projected[ids[2]];
     if (!a||!b||!c) continue;
     if (Math.max(a.x,b.x,c.x)<0||Math.min(a.x,b.x,c.x)>width||Math.max(a.y,b.y,c.y)<0||Math.min(a.y,b.y,c.y)>height) continue;
     let fill;
-    if (isWave) fill='rgba(80,211,255,0.24)';
+    if (isWave) {
+      const rgb=mesh.op&&Number.isFinite(mesh.op[i])?palette(mesh.op[i],contourRange[0],contourRange[1]):[80,211,255];
+      fill=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.36)`;
+    }
     else if (data.preview) fill='rgb(151,183,201)';
     else {
       const p=mesh.points[ids[0]], q=mesh.points[ids[1]], r=mesh.points[ids[2]];
@@ -142,24 +185,155 @@ function addTriangles(items, mesh, isWave, field, low, high, width, height) {
       const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
       const length=Math.hypot(...n)||1;
       const light=0.55+0.45*Math.abs((n[0]*-0.4+n[1]*-0.3+n[2]*0.85)/length);
-      const rgb=palette(mesh[field][i],low,high,light);
+      const rgb=field==='solid'?[Math.round(205*light),Math.round(214*light),Math.round(220*light)]:palette(mesh[field][i],low,high,light);
       fill=`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
     }
     items.push({a,b,c,fill,isWave,depth:(a.depth+b.depth+c.depth)/3});
   }
+}
+function voxelCenter(voxel,cell) {
+  return voxel.origin.map((value,axis)=>value+(cell[axis]+0.5)*voxel.size);
+}
+function addVoxelSurface(items,voxel,values,isWave,field,low,high,width,height) {
+  const style=isWave?controls.waveStyle.value:controls.wallStyle.value;
+  if(style!=='voxel'||!voxel||!voxel.cells)return;
+  for(const cell of voxel.cells){
+    const centre=voxelCenter(voxel,cell),projected=project(centre,width,height);
+    if(!projected||projected.x < -20||projected.x > width+20||projected.y < -20||projected.y > height+20)continue;
+    const faceIndex=cell[3];
+    let rgb,alpha;
+    if(isWave){
+      const value=values&&Number.isFinite(values[faceIndex])?values[faceIndex]:0;
+      rgb=palette(value,contourRange[0],contourRange[1]);alpha=.58;
+    }else if(field==='solid'){
+      rgb=[190,205,215];alpha=1;
+    }else{
+      const value=values&&Number.isFinite(values[faceIndex])?values[faceIndex]:low;
+      rgb=palette(value,low,high);alpha=1;
+    }
+    items.push({voxelCube:true,centre,size:voxel.size,rgb,alpha,isWave,depth:projected.depth});
+  }
+}
+function drawVoxelCube(item,width,height) {
+  const [x,y,z]=item.centre,s=item.size*.5;
+  const points=[[-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],[-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]]
+    .map(offset=>project([x+offset[0],y+offset[1],z+offset[2]],width,height));
+  if(points.some(point=>!point))return;
+  const camera=[Math.cos(pitch)*Math.sin(yaw),Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch)];
+  const faces=[
+    {ids:[0,3,2,1],normal:[0,0,-1],light:.62},{ids:[4,5,6,7],normal:[0,0,1],light:1},
+    {ids:[0,1,5,4],normal:[0,-1,0],light:.72},{ids:[3,7,6,2],normal:[0,1,0],light:.86},
+    {ids:[0,4,7,3],normal:[-1,0,0],light:.68},{ids:[1,2,6,5],normal:[1,0,0],light:.82},
+  ].filter(face=>face.normal.reduce((sum,value,axis)=>sum+value*camera[axis],0)>0);
+  faces.sort((a,b)=>{
+    const depth=face=>face.ids.reduce((sum,index)=>sum+points[index].depth,0)/face.ids.length;
+    return depth(a)-depth(b);
+  });
+  for(const face of faces){
+    const polygon=face.ids.map(index=>points[index]);
+    ctx.beginPath();ctx.moveTo(polygon[0].x,polygon[0].y);for(let index=1;index<polygon.length;index++)ctx.lineTo(polygon[index].x,polygon[index].y);ctx.closePath();
+    const rgb=item.rgb.map(value=>Math.round(value*face.light));
+    ctx.fillStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${item.alpha})`;ctx.fill();
+    ctx.strokeStyle=item.isWave?'rgba(190,239,255,.16)':'rgba(8,25,38,.34)';ctx.lineWidth=.45;ctx.stroke();
+  }
+}
+function addContourTriangles(items, mesh, width, height) {
+  if (!mesh||!mesh.points||!mesh.faces||!mesh.op) return;
+  const projected=mesh.points.map(p=>project(p,width,height));
+  for(let i=0;i<mesh.faces.length;i++){
+    const ids=mesh.faces[i],a=projected[ids[0]],b=projected[ids[1]],c=projected[ids[2]];
+    if(!a||!b||!c)continue;
+    if(Math.max(a.x,b.x,c.x)<0||Math.min(a.x,b.x,c.x)>width||Math.max(a.y,b.y,c.y)<0||Math.min(a.y,b.y,c.y)>height)continue;
+    const rgb=palette(mesh.op[i],contourRange[0],contourRange[1]);
+    items.push({a,b,c,fill:`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,isWave:false,depth:(a.depth+b.depth+c.depth)/3});
+  }
+}
+function add3(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]];}
+function voxelImage(uri) {
+  if(voxelImages.has(uri)){
+    const cached=voxelImages.get(uri);voxelImages.delete(uri);voxelImages.set(uri,cached);return cached;
+  }
+  const image=new Image(); image.decoding='async'; voxelImages.set(uri,image);
+  while(voxelImages.size>MAX_VOXEL_IMAGES)voxelImages.delete(voxelImages.keys().next().value);
+  image.onload=()=>{if(voxelImages.get(uri)===image)scheduleRender();};
+  image.src=uri; return image;
+}
+function visibleVoxelNames() {
+  return [['ground',controls.showGround],['xNormal',controls.showX],['yNormal',controls.showY],['zNormal',controls.showZ]]
+    .filter(([,control])=>control&&control.checked).map(([name])=>name);
+}
+function preloadFrame(index) {
+  if(!data.frames.length)return;
+  const frame=data.frames[(index+data.frames.length)%data.frames.length],voxels=frame.voxels||{};
+  visibleVoxelNames().forEach(name=>{if(voxels[name]&&voxels[name].png)voxelImage(voxels[name].png);});
+}
+function frameChanged() {
+  scheduleRender();
+  const index=Number(controls.time.value);preloadFrame(index+1);preloadFrame(index+2);
+}
+function drawImageTriangle(image,source,destination) {
+  const [s0,s1,s2]=source,[d0,d1,d2]=destination;
+  const denominator=s0[0]*(s1[1]-s2[1])+s1[0]*(s2[1]-s0[1])+s2[0]*(s0[1]-s1[1]);
+  if(Math.abs(denominator)<1e-9)return;
+  const a=(d0.x*(s1[1]-s2[1])+d1.x*(s2[1]-s0[1])+d2.x*(s0[1]-s1[1]))/denominator;
+  const c=(d0.x*(s2[0]-s1[0])+d1.x*(s0[0]-s2[0])+d2.x*(s1[0]-s0[0]))/denominator;
+  const e=(d0.x*(s1[0]*s2[1]-s2[0]*s1[1])+d1.x*(s2[0]*s0[1]-s0[0]*s2[1])+d2.x*(s0[0]*s1[1]-s1[0]*s0[1]))/denominator;
+  const b=(d0.y*(s1[1]-s2[1])+d1.y*(s2[1]-s0[1])+d2.y*(s0[1]-s1[1]))/denominator;
+  const d=(d0.y*(s2[0]-s1[0])+d1.y*(s0[0]-s2[0])+d2.y*(s1[0]-s0[0]))/denominator;
+  const f=(d0.y*(s1[0]*s2[1]-s2[0]*s1[1])+d1.y*(s2[0]*s0[1]-s0[0]*s2[1])+d2.y*(s0[0]*s1[1]-s1[0]*s0[1]))/denominator;
+  ctx.save();
+  // The orthogonal CFD slices often overlap.  A modest fixed opacity keeps
+  // the building and wave context readable without smoothing the 0.1 m cells.
+  ctx.globalAlpha=0.72;
+  ctx.beginPath();ctx.moveTo(d0.x,d0.y);ctx.lineTo(d1.x,d1.y);ctx.lineTo(d2.x,d2.y);ctx.closePath();ctx.clip();
+  ctx.transform(a,b,c,d,e,f);ctx.imageSmoothingEnabled=false;ctx.drawImage(image,0,0);ctx.restore();
+}
+function voxelPlane(voxel,width,height) {
+  if(!voxel||!voxel.png)return null;
+  const p00=voxel.origin,p10=add3(p00,voxel.u),p01=add3(p00,voxel.v),p11=add3(p10,voxel.v);
+  const projected=[p00,p10,p11,p01].map(point=>project(point,width,height));
+  if(projected.some(point=>!point))return null;
+  return {voxel,projected,depth:projected.reduce((sum,point)=>sum+point.depth,0)/4};
+}
+function drawVoxelPlane(item) {
+  const image=voxelImage(item.voxel.png);
+  if(!image.complete||!image.naturalWidth)return;
+  const [a,b,c,d]=item.projected,w=image.naturalWidth,h=image.naturalHeight;
+  drawImageTriangle(image,[[0,0],[w,0],[w,h]],[a,b,c]);
+  drawImageTriangle(image,[[0,0],[w,h],[0,h]],[a,c,d]);
 }
 function render() {
   const width=canvas.clientWidth, height=canvas.clientHeight;
   if (!width||!height) return;
   ctx.fillStyle='#0b1a2a'; ctx.fillRect(0,0,width,height);
   grid(width,height);
-  const frame=data.frames[Number(controls.time.value)], field=controls.field.value;
+  const frameIndex=Number(controls.time.value),frame=data.frames[frameIndex], field=controls.field.value;
+  const planeSizes=[...new Set(Object.values(frame.voxels||{}).map(voxel=>Number(voxel.cellSize).toLocaleString()))];
+  document.getElementById('voxelStatus').textContent=modelVoxelText+(planeSizes.length?` · ระนาบ ${planeSizes.join('/')} m`: ' · ไม่มี pressure slice ในเฟรมนี้');
   const low=Number(controls.min.value), high=Number(controls.max.value);
-  const items=[];
+  const items=[], contours=frame.contours||{};
+  if(controls.showGround&&controls.showGround.checked)addContourTriangles(items,contours.ground,width,height);
+  if(controls.showX&&controls.showX.checked)addContourTriangles(items,contours.xNormal,width,height);
+  if(controls.showY&&controls.showY.checked)addContourTriangles(items,contours.yNormal,width,height);
+  if(controls.showZ&&controls.showZ.checked)addContourTriangles(items,contours.zNormal,width,height);
+  const voxels=frame.voxels||{},voxelPlanes=[];
+  if(controls.showGround&&controls.showGround.checked)voxelPlanes.push(voxelPlane(voxels.ground,width,height));
+  if(controls.showX&&controls.showX.checked)voxelPlanes.push(voxelPlane(voxels.xNormal,width,height));
+  if(controls.showY&&controls.showY.checked)voxelPlanes.push(voxelPlane(voxels.yNormal,width,height));
+  if(controls.showZ&&controls.showZ.checked)voxelPlanes.push(voxelPlane(voxels.zNormal,width,height));
+  // Keep the textured CFD planes in the same painter-order queue as the
+  // building and wave triangles.  Drawing every plane first allowed geometry
+  // behind a slice to bleed through it as dark triangular fragments.
+  items.push(...voxelPlanes.filter(Boolean).map(item=>Object.assign({voxelPlane:true},item)));
+  addVoxelSurface(items,frame.waveVoxels,frame.wave&&frame.wave.op,true,field,low,high,width,height);
   addTriangles(items,frame.wave,true,field,low,high,width,height);
-  addTriangles(items,frame.wall,false,field,low,high,width,height);
+  const wall=data.wallGeometry?Object.assign({},data.wallGeometry,frame.wall):frame.wall;
+  addVoxelSurface(items,data.modelVoxels,field==='solid'?null:wall[field],false,field,low,high,width,height);
+  addTriangles(items,wall,false,field,low,high,width,height);
   items.sort((a,b)=>a.depth-b.depth);
   for (const t of items) {
+    if (t.voxelPlane) { drawVoxelPlane(t); continue; }
+    if (t.voxelCube) { drawVoxelCube(t,width,height); continue; }
     ctx.beginPath(); ctx.moveTo(t.a.x,t.a.y); ctx.lineTo(t.b.x,t.b.y); ctx.lineTo(t.c.x,t.c.y); ctx.closePath();
     ctx.fillStyle=t.fill; ctx.fill();
     if ((t.isWave ? controls.waveStyle.value : controls.wallStyle.value)==='edges') {
@@ -169,31 +343,55 @@ function render() {
     }
   }
   drawDomain(width,height);
+  drawConfiguredSources(width,height);
   controls.timeValue.textContent=`${(frame.time*1000).toFixed(2)} ms`;
-  if (frame.stats) document.getElementById('surfaceStats').textContent=`Overpressure ${frame.stats.op.toLocaleString()} kPa · Peak ${frame.stats.opMax.toLocaleString()} kPa · T ${frame.stats.temp.toLocaleString()} K · ผิวคลื่น ${isoLabel} ไกลสุด ${frame.stats.waveRadius.toLocaleString()} m`;
+  if (frame.stats) {
+    const shellRange=Number.isFinite(frame.stats.waveOpMin)&&Number.isFinite(frame.stats.waveOpMax)
+      ? ` · 3D shell ${frame.stats.waveOpMin.toLocaleString()}…${frame.stats.waveOpMax.toLocaleString()} kPa` : '';
+    const waveVoxel=frame.waveVoxels?` · ${frame.waveVoxels.cells.length.toLocaleString()} wave boxes @ ${frame.waveVoxels.size.toLocaleString()} m`:'';
+    document.getElementById('surfaceStats').textContent=`Overpressure ${frame.stats.op.toLocaleString()} kPa · Peak ${frame.stats.opMax.toLocaleString()} kPa · T ${frame.stats.temp.toLocaleString()} K${shellRange} · ${isoLabel} ไกลสุด ${frame.stats.waveRadius.toLocaleString()} m${waveVoxel}`;
+  }
   controls.minLabel.textContent=low; controls.maxLabel.textContent=high;
+  preloadFrame(frameIndex+1);
 }
 function fieldChanged() {
-  const range=defaults[controls.field.value];
+  const solid=controls.field.value==='solid', range=solid?defaults.op:defaults[controls.field.value];
+  document.getElementById('wallScaleGroup').hidden=solid;
   controls.min.value=range[0]; controls.max.value=range[1]; render();
 }
 controls.field.addEventListener('change',fieldChanged);
 document.getElementById('focus').addEventListener('change',e=>{
-  const blast=e.target.value==='blast';
-  viewCenter=blast?data.blastCenter:data.center;
-  viewRadius=blast?data.blastRadius:data.radius;
+  if(e.target.value==='town'){viewCenter=data.center;viewRadius=data.radius;}
+  else if(e.target.value.startsWith('source:')){const source=configuredSources[Number(e.target.value.split(':')[1])];viewCenter=source.centre;viewRadius=Math.max(5,Math.min(data.blastRadius||8,10));}
+  else {viewCenter=data.blastCenter;viewRadius=data.blastRadius;}
   zoom=1; render();
 });
 controls.wallStyle.addEventListener('change',render);
 controls.waveStyle.addEventListener('change',render);
-controls.time.addEventListener('input',render);
+[controls.showGround,controls.showX,controls.showY,controls.showZ].filter(Boolean).forEach(control=>control.addEventListener('change',frameChanged));
+controls.time.addEventListener('input',frameChanged);
 controls.min.addEventListener('input',render);
 controls.max.addEventListener('input',render);
+function stopPlayback() {
+  if(playbackRequest!==null)cancelAnimationFrame(playbackRequest);
+  playbackRequest=null;playbackLast=0;controls.play.textContent='เล่น';
+}
+function playbackTick(now) {
+  if(playbackRequest===null)return;
+  const step=Number(controls.playSpeed.value)||125;
+  if(!playbackLast)playbackLast=now;
+  const elapsed=now-playbackLast;
+  if(elapsed>=step){
+    const advance=Math.max(1,Math.floor(elapsed/step));playbackLast+=advance*step;
+    controls.time.value=(Number(controls.time.value)+advance)%data.frames.length;frameChanged();
+  }
+  playbackRequest=requestAnimationFrame(playbackTick);
+}
 controls.play.addEventListener('click',()=>{
-  if (timer) { clearInterval(timer); timer=null; controls.play.textContent='เล่น'; return; }
-  controls.play.textContent='หยุด';
-  timer=setInterval(()=>{ controls.time.value=(Number(controls.time.value)+1)%data.frames.length; render(); },300);
+  if(playbackRequest!==null){stopPlayback();return;}
+  controls.play.textContent='หยุด';playbackLast=0;playbackRequest=requestAnimationFrame(playbackTick);
 });
+document.addEventListener('visibilitychange',()=>{if(document.hidden)playbackLast=0;});
 document.getElementById('reset').addEventListener('click',()=>{yaw=-0.65;pitch=0.72;zoom=1;render();});
 document.getElementById('resetPreview').addEventListener('click',()=>{yaw=-0.65;pitch=0.72;zoom=1;render();});
 canvas.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId);});
@@ -206,7 +404,7 @@ canvas.addEventListener('pointermove',e=>{
 canvas.addEventListener('pointerup',()=>{dragging=false;});
 canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(0.4,Math.min(3,zoom*Math.exp(-e.deltaY*0.001)));render();},{passive:false});
 window.addEventListener('resize',resize);
-fieldChanged(); resize();
+fieldChanged(); resize(); preloadFrame(0); preloadFrame(1);
 </script>
 </body>
 </html>

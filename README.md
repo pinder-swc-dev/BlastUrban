@@ -50,14 +50,9 @@ python3 tools/blast_case_ui/blast_case_web.py
 บน macOS เปิดจาก Finder ได้ง่ายที่สุดด้วย `BlastUrbanUI.command` ที่ root ของ
 โปรเจกต์ Launcher จะเปิด Browser UI และเก็บไฟล์งานไว้ใน
 `~/BlastUrbanWorkspace/{cases,results,temp}` แยกจาก source code โดยอัตโนมัติ
-ไฟล์ `tools/blast_case_ui/Launch_BlastCaseUI.command` เดิมยังใช้งานได้เช่นกัน
-Launcher จะเปิด Browser UI
-เพื่อหลีกเลี่ยง system Tk 8.5 ที่ใช้ไม่ได้บน macOS 26 ส่วน
+Launcher ใช้ Browser UI เพื่อหลีกเลี่ยง system Tk 8.5 ที่ใช้ไม่ได้บน macOS 26 ส่วน
 `surfaceCheck` จะใช้ Docker image ที่มีอยู่ และ solver หลักยังรันใน Linux
 container หรือ calculation server
-
-บน Linux ที่มี Tk สามารถเปิด Desktop UI ด้วย
-`python3 tools/blast_case_ui/blast_case_ui.py`
 
 ดู workflow และข้อจำกัดที่
 [tools/blast_case_ui/README_TH.md](tools/blast_case_ui/README_TH.md)

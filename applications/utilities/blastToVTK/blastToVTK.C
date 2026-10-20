@@ -388,6 +388,11 @@ int main(int argc, char *argv[])
     );
     argList::addOption
     (
+        "sampleTime",
+        "Sample one physical time while retaining all saved times for interpolation"
+    );
+    argList::addOption
+    (
         "interpolationScheme",
         "Scheme for interpolation"
     );
@@ -469,6 +474,20 @@ int main(int argc, char *argv[])
 
         Info<< "Sampling from " << tMin << " to " << tMax
             << ", deltaT: " << dt << nl << endl;
+    }
+    if (args.optionFound("sampleTime"))
+    {
+        const scalar sampleTime = args.optionRead<scalar>("sampleTime");
+        if (sampleTime < times[0] || sampleTime > times.last())
+        {
+            FatalErrorInFunction
+                << "Requested sampleTime " << sampleTime
+                << " is outside saved time range " << times[0]
+                << " to " << times.last() << nl
+                << abort(FatalError);
+        }
+        sampleTimes.setSize(1);
+        sampleTimes[0] = sampleTime;
     }
 
     PtrList<Time> runTimes(1);
@@ -742,7 +761,14 @@ int main(int argc, char *argv[])
         fileName file = dir / patchName + ".vtk";
 
         // Open the file
-        std::ofstream os(file, std::ios::binary);
+        // All MPI ranks participate in collecting the global patch and fields,
+        // but only the master may open the shared output path.  Opening the
+        // same std::ofstream on every rank races truncation and corrupts VTK.
+        std::ofstream os;
+        if (Pstream::master())
+        {
+            os.open(file, std::ios::binary);
+        }
 
         // Write the header
         if (Pstream::master())

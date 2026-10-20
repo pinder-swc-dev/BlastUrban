@@ -457,3 +457,242 @@ process group. Verified on Linux with a stub `blastFoam` (no solver run): succes
 calculation failure, web-export failure, early failure, duplicate refusal, and
 SIGTERM (`stopped`, `decomposeParDict` restored, no child left). Slurm itself
 (`sbatch`/`scancel`) was not available and is untested.
+
+## High-risk remediation and orchestration audit — 2026-10-02
+
+Scope: localhost SSH adapter, Docker job runner, job inventory/cleanup controls
+and control-plane overhead. No CFD command, mesh generation, initialization or
+solver timestep was run. The accepted blastFoam dictionaries, templates and
+command order were not changed.
+
+### Findings closed in code
+
+| Finding | Result | Regression evidence |
+| --- | --- | --- |
+| systemd user check ignored `Linger` | `check` returns `yes/no/unknown`; submit defaults to refusal unless `yes` or literal `accept_no_linger: true`; runner checks again | fake-`loginctl` helper and refusal tests; read-only real endpoint returned `Linger=no` |
+| unit/container name repeated `blasturban-` and could collide after truncation | repeated prefix removed; six-character SHA-256 suffix retained; full name capped at 63 characters | two long equal-prefix names produce different bounded names |
+| Docker outcome was folded into runner exit | terminal JSON always has `docker_exit_code` and `oom_killed` (nullable where Docker never started) | fake-Docker OOM fixture records exit 137 and `oom_killed=true` |
+| fetch failure states lacked regression coverage | only `complete` and explicitly supported legacy results pass the gate | `running`, `failed`, `stopped`, `not_found` rejection test |
+| readiness trusted `command -v` only | resolved blastFoam path must be absolute, regular and executable before `blastFoam -help` | static contract test; no `$USER`-derived runtime path |
+| bulk cleanup endpoint deleted immediately | endpoint is dry-run only; deletion remains the guarded per-job endpoint and writes an audit record | source regression test and read-only real API dry-run |
+
+The server inventory on 2026-10-02 found one job folder:
+`urbanBlast3D`, 4 KiB, empty, no status, no unit, updated 2026-09-21. It is
+classified `orphan` and is not deleted. The only running matching container was
+`blasturban-build-sedswclab01`; the UI/backend explicitly exclude build
+containers from worker preparation. No non-BlastUrban service was inspected
+inside or changed.
+
+The staged `install-inside-ubuntu2204.sh` passes `bash -n`. A targeted scan
+found no embedded password/private key/token and no `rm -rf`, Docker deletion,
+Git reset/clean, filesystem formatting or raw-device write. `shellcheck` was not
+installed on the Mac, so that check is recorded as NOT TESTED.
+
+### Control-plane measurements and decisions
+
+`tools/bench/benchmark_ssh.py` ran six remote `true` calls over the configured
+LAN server. Independent connections took 1.927821 s total (0.321304 s mean,
+0.267614 s median). After the master connection was established, six reused
+calls took 0.139782 s total (0.023297 s mean, 0.021481 s median); master setup
+took 0.249380 s. SSH multiplexing is enabled and can be disabled with
+`BLASTURBAN_SSH_MULTIPLEX=0`. These numbers measure only SSH control overhead,
+not CFD speed. A live adapter connection produced a 77-byte ControlPath with
+directory mode 0700 and socket mode 0600; normal shutdown closed the master and
+left no socket.
+
+Image readiness caching by immutable `(image ID, platform)` is enabled. After
+the user authorized the exact smoke lifecycle, a readiness miss took 0.931318 s
+and the next hit took 0.209932 s against image ID
+`sha256:fd0af2c1427339367d49858dffb450024d27d1b4bbebefdd4e42a1a17d7b8901`.
+Set `BLASTURBAN_IMAGE_READY_CACHE=0` to restore the uncached behavior.
+
+The following proposals were not applied: incremental `chown` (no safe
+representative `processor*` tree and the image depends on `/root/OpenFOAM`), CPU
+pinning/OpenMPI tuning (requires solver scaling evidence), parallel VTK export
+(no approved representative VTK fixture for bit-for-bit comparison), rsync
+compression changes (no approved remote transfer artifact), and adaptive UI
+polling (no measured latency/resource result). Job-size `du` remains lazy behind
+the user-opened list and now has a two-second per-job timeout; no speed claim is
+made from the single empty production job.
+
+### End-to-end smoke evidence and remaining limits
+
+After explicit cleanup authorization, `tools/bench/smoke_webui.py` exercised
+the real localhost HTTP backend, SSH, rsync, systemd user units and the selected
+Docker image. Its three scripts required `BLASTURBAN_SMOKE_TEST=1`; no mesh,
+initialization, solver timestep or CFD post-processing command ran.
+
+- success: `running -> complete`, Docker exit 0, `OOMKilled=false`, unit result
+  success/0, logs contained `SMOKE TEST — NOT CFD`, fetched viewer returned HTTP
+  200 with `id="smoke-marker"` and `ไม่ใช่ผลการคำนวณ CFD`, with no canvas;
+- duplicate submit while running: rejected before suffix allocation;
+- guarded `Allrun exit 3`: `failed/calculation_failed`, Docker exit 3;
+- SIGKILL of the exact runner: `failed/runner_aborted` within the polling limit;
+- stop endpoint: `stopped`; fetch was rejected for running, failed and stopped;
+- no non-build `blasturban*` container remained and journals contained none of
+  `clear_console`, `unbound variable`, or `bash_logout`.
+
+The four exact smoke jobs were deleted through `/api/server/delete-job`, their
+local fixture/result workspace was moved to Trash, and the deletion audit log
+was retained on the server. The confirmed orphan `urbanBlast3D` was deleted by
+the same endpoint. Confirmed Mac candidates were moved to Trash, not permanently
+deleted. Repository cleanup was committed separately as `43a35827` (legacy Tk
+UI) and `48d30ef0` (archived media).
+
+A real low-memory Docker OOM injection and natural logout-with-`Linger=no` VM
+experiment remain NOT TESTED. The OOM state machine was tested with a fake
+Docker executable only. Colima remained stopped and Docker context remained
+`default`; no VM state was changed.
+
+## Balanced Fast full-CFD benchmark and compact 3-D result — 2026-10-07/08
+
+Unlike the control-plane smoke evidence above, this section records one real
+full blastFoam comparison on the shared Ubuntu worker. Both cases used the same
+town STL, domain, 100 kg C4 source at `(35, 20, 1)`, three probes, 10 MPI ranks
+and `endTime=0.0125 s`. The reference is the completed
+`urbanBlast3D-004`; the candidate is
+`blasturban-balanced-fast-full-20261007`. No non-BlastUrban container or path
+was changed.
+
+| Measurement | 1.5 m reference | Balanced Fast | Observed change |
+| --- | ---: | ---: | ---: |
+| base cells | 202,575 | 86,240 | -57.4% |
+| initialised cells | 835,987 | 502,902 | -39.8% |
+| blastFoam timesteps | 50,005 | 6,321 | -87.4% |
+| blastFoam ClockTime | 37,062 s | 3,114 s | 11.9x faster |
+| maximum observed/final Courant | 0.02179 | 0.06766 | both below `maxCo=0.3` |
+| pressure-slice write times | 126 | 49 | -61.1% |
+| whole job | 35,088,170,777 B | 1,295,237,587 B | -96.3% |
+| `postProcessing/` | 3,031,231,045 B | 772,357,087 B | -74.5% |
+| processor numeric time directories | 126 | 3 | `purgeWrite 2` effective |
+
+The candidate's authoritative status was `complete`, Docker exit 0,
+`OOMKilled=false`, and recorded systemd result `success/0`; total orchestrated
+elapsed time was 3,401.27 s. No candidate or re-export container remained.
+The fetched result passed the real `/api/server/fetch` path.
+
+This speed result is not an accuracy result. Linear interpolation of the Fast
+probe histories onto the reference times gave peak-overpressure differences
+of -24.8%, -26.2% and -10.8%, with peak-time shifts of 345, 283 and 61 us.
+Final impulse differences were -10.7%, -4.9% and +1.0%. The UI therefore calls
+Balanced Fast a screening/visualisation profile and directs peak-sensitive
+work to Quality/Custom plus mesh convergence.
+
+The compact viewer retained 48 physical-time frames, exact STL wall geometry
+(2,999 faces), and four CFD-derived Cartesian display planes at 0.1 m. Every
+embedded PNG signature and dimension was decoded and matched its metadata;
+the generated JavaScript parsed in JavaScriptCore. A WebKit snapshot at
+6.51 ms confirmed that the viewer renders. Slice planes now share painter
+ordering with geometry and use fixed translucency to keep buildings readable.
+
+The pressure iso-surface is additionally coloured as a 3-D overpressure shell
+using the real per-face `p - ambient` samples in `p_pContours.vtk`. It remains
+bounded to at most 1,600 shell faces per frame. On the full result all 48 frames
+had one finite value per displayed face (556--1,600 faces); adding the field
+increased the standalone HTML from 13,525,963 to 13,919,592 bytes, about 3%.
+This shell is a CFD iso-surface, not a synthetic gas sphere and not volumetric
+smoke. Values outside the -50..50 kPa display range are colour-clamped only;
+the embedded numeric samples and server CFD output are unchanged.
+
+## Source-placement and viewer playback follow-up — 2026-10-08
+
+The setup preview now consumes the available desktop card height and includes a
+compact source summary beside the model. Source placement uses one shared
+pointer-to-domain transform for hover and click: the top-view hover shows an
+X/Y crosshair before committing the source, while the summary reports the final
+OpenFOAM X/Y/Z and validation state. A live WebKit check at 1440x900 placed the
+domain centre exactly at X=35, Y=37.5; the source card remained visible without
+page scrolling. This changes only UI interaction, not source physics or the
+generated OpenFOAM dictionaries.
+
+The standalone result viewer now drives playback with `requestAnimationFrame`,
+offers 180/125/80 ms speeds, preloads the next two real CFD frames, and keeps a
+bounded cache of 16 decoded slice images. It does not interpolate, invent, or
+blend additional physical frames. The completed full-CFD result was re-exported
+without rerunning blastFoam and fetched through the real WebUI endpoint. In a
+visible WebKit window, the default 125 ms playback advanced 18 of 48 real frames
+in 2.2 seconds and the cache stopped at 16 entries. Re-export took 232 seconds;
+the resulting standalone HTML is 13,921,735 bytes. No re-export container
+remained afterward.
+
+## Multiple-source case generation — 2026-10-08
+
+The localhost scenario adapter and deterministic builder now accept up to 16
+discrete C4 sources, each with centre, mass and activation delay, while retaining
+the historical single-source fields as a compatibility fallback. Validation
+checks every charge against the domain and STL, requires delay below `endTime`,
+and rejects overlapping theoretical charge spheres. Case generation writes one
+`sphericalMassToCell` region per source plus matching `points` and `delays` lists
+for blastFoam's activation model.
+
+A no-CFD smoke case used two sources: 10 kg at `(35,20,1)` with zero delay and
+5 kg at `(35,15,1)` with a 1 ms delay. The real localhost `/api/source-check`
+and `/api/validate` endpoints accepted both positions and reported 15 kg total.
+
+## STL and calculated-wave voxel display — 2026-10-08
+
+The standalone result adapter now defaults to bounded Cartesian surface voxels
+for both the repaired STL model and the calculated pressure iso-surface. Model
+cells are sampled from the STL and mapped to the nearest real wall-field face;
+wave cells retain their source iso-surface face and calculated overpressure.
+The exporter requests 0.1 m display cells but increases display size when needed
+to remain below 6,000 model cells and 2,500 wave cells per frame. The viewer
+reports the effective size and count. This changes visualization only: it does
+not replace snappyHexMesh cells, alter blastFoam dictionaries, fill an invented
+building volume, or interpolate additional physical-time frames.
+
+A geometry-only check of the 424-face template STL produced 4,715 bounded
+surface boxes at an effective 1.712409 m in 0.071 seconds when 0.1 m was
+requested; the adaptive size is expected because the whole-town 6,000-cell cap
+takes precedence. A WebKit smoke fixture explicitly labelled `SMOKE TEST — NOT
+CFD / ไม่ใช่ผล CFD` rendered both model and wave boxes with voxel controls
+selected. Full VTK re-export was not run locally because this Mac session had
+neither Python VTK nor a running Docker daemon.
+
+Job `urbanBlast3D-009-20261009-022741` exposed a second display-boundary case:
+its ground slice required 3,988,358 cells at 0.1 m, exceeding the historical
+2,000,000-cell hard limit. The optional slice raised `ValueError`, every one of
+48 otherwise-valid wall/wave frames was discarded, and the runner correctly
+reported `viewer_failed` after OpenFOAM had completed. The plane sampler now
+adapts spacing under a 500,000-cell cap, records requested/effective size, skips
+an individually invalid optional layer instead of the whole frame, and includes
+per-frame errors when no frame survives.
+
+The existing CFD output was re-exported without rerunning mesh or blastFoam.
+Recovery produced 48 frames in an 11,367,251-byte HTML file and a verified
+5,029,838-byte archive: 5,095 STL boxes at 3.289447 m, 1,939--2,499 wave boxes
+at 0.288566--2.007031 m, and 192 pressure planes no larger than 499,875 cells.
+Of those planes, 144 adapted up to 0.282431 m. WebKit loaded the real result
+with model/wave voxel modes selected and only the ground plane enabled by
+default. Ownership was returned to `sedswclab01`, temporary containers were
+removed, and the status records the original viewer failure plus a
+`postprocess_only_adaptive_voxel_export` recovery with `cfd_rerun: false`.
+Status reconciliation continues to expose the original systemd exit-code but
+accepts the later `complete` state only when recovery time is newer, the Viewer
+size matches, the archive exists, post-processing exited zero, and Viewer plus
+archive verification flags are present.
+
+A later submission of the same scenario,
+`urbanBlast3D-009-20261009-022741-20261009-080729-20261009-080738`, failed for
+the same reason because the selected durable case still contained the old
+exporter. Its 400 `postProcessing` files (641,362,557 bytes) and case manifest
+were byte-identical to the verified first job; the combined VTK SHA-256 was
+`76cb2d2874998a103ca5ac605b3776dd00c608673c38c08a77f025face61b21a`.
+The verified 48-frame Web result was therefore reused without rerunning CFD,
+repackaged for this job, and checksum-checked. Recovery is recorded as
+`postprocess_reused_identical_vtk_export` with the source job and VTK digest;
+the original systemd `exit-status=1` remains available as historical evidence.
+
+To prevent recurrence, server submission now overlays six current, trusted
+orchestration/export assets after the case rsync and before job start. A
+generated manifest contains the SHA-256 of every overlay file, and the remote
+submit path refuses to start unless every file matches. The overlay explicitly
+excludes `Allrun`, `preflight.sh`, `system/`, `constant/`, `0/`, STL geometry,
+and configuration, so this compatibility repair does not change CFD inputs or
+solver numerics. The selected local case is not modified.
+
+`/api/export` produced the case, and `foamDictionary` in the selected server
+image parsed the generated points as `((35 20 1) (35 15 1))` and delays as
+`(0 0.001)`. A visible WebKit interaction added the second source and collected
+the same two-item request contract. No mesh or solver command was run; physical
+accuracy of interacting or delayed blast waves therefore remains unvalidated.

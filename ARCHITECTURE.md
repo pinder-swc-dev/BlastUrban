@@ -60,6 +60,52 @@ Ubuntu server reachable over SSH.
 | Post-processing | `makeWebResults.sh`, `exportBlast3D.py` | VTK to standalone HTML/CSV |
 | Job persistence | case directory + `server-job-status.json` | filesystem only |
 
+The localhost adapter reports the systemd user-manager persistence contract as
+`linger: yes|no|unknown`. Submission requires `yes` unless the trusted operator
+sends the literal boolean `accept_no_linger: true`; the host-side runner repeats
+this check. It records both values in `server-job-status.json`. Terminal status
+also carries `docker_exit_code` (integer or `null`) and `oom_killed` (boolean or
+`null`) separately from the runner/systemd `exit_code`.
+
+The current compact result adapter consumes solver-written sampled surfaces:
+wall fields, the pressure iso-surface, the ground patch, and X/Y/Z cutting
+planes. It shares one wall geometry across browser frames and renders the
+calculated overpressure slices over solid buildings. Generated cases split
+surface function objects by required field and use binary VTK; `Allrun` no
+longer produces a second, duplicate ground/wall VTK series.
+
+Case generation exposes versioned `fast`, `quality`, and `custom` performance
+profiles. `fast` is the Balanced Fast default documented by ADR 0003: it keeps
+`maxCo=0.3` and the physical models unchanged, but raises the timestep ceiling,
+uses a coarser base-cell target, bounds the cell count, retains two raw restart
+writes, and aligns calculated surface output with the Web viewer frame limit.
+The selected profile and every effective low-level value remain recorded in
+`case-builder.json`; the runner does not silently change them except for MPI
+ranks matching the allocated cores.
+
+For browser rendering, ground and X/Y/Z surfaces are resampled at 0.1 m onto
+axis-aligned Cartesian display cells and encoded as PNG textures. The repaired
+STL and calculated pressure iso-surface are also quantized into bounded surface
+voxel shells. Each model voxel maps to the nearest calculated wall face, while
+each wave voxel retains its source iso-surface face and `(p - ambient)` value.
+Requested 0.1 m boxes are enlarged adaptively when necessary to remain under
+the browser cell caps. These are visualization data, not solver cells; the
+pipeline does not fill an invented solid or generate a synthetic gas sphere.
+The original triangle surfaces remain embedded as a diagnostic display
+fallback.
+
+The measured `fast` profile is a screening/visualisation profile, not a
+mesh-converged substitute for `quality`. In the 100 kg comparison recorded in
+ADR 0003 it reduced solver wall time substantially, but probe peak
+overpressures differed by 11--26 percent from the 1.5 m reference. This
+distinction is surfaced in the UI rather than hidden by the adapter.
+
+SSH and rsync share an OpenSSH ControlMaster socket with a 60-second persistence
+window. The short hashed socket path is held under the local workspace temp
+directory and the adapter closes tracked masters on normal shutdown. This can
+be disabled with `BLASTURBAN_SSH_MULTIPLEX=0` and does not change the trust
+boundary or expose a network listener.
+
 ### Current trust model
 
 The person operating the browser is also an administrator of the calculation
@@ -130,8 +176,12 @@ network services.
 ### Scenario input
 
 The canonical input should be a versioned scenario document plus separately
-uploaded geometry. It contains SI units, domain, source, ambient conditions,
+uploaded geometry. It contains SI units, domain, one or more discrete sources,
+ambient conditions,
 mesh controls, solver controls, probes, requested outputs, and resource class.
+Each source has a centre, mass and non-negative activation delay. The current
+localhost adapter also accepts the legacy single-source scalar fields, but
+normalizes new requests to a `sources` list before deterministic case generation.
 It must not contain arbitrary OpenFOAM dictionaries or commands.
 
 ### Job identity and storage

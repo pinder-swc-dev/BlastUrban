@@ -166,6 +166,13 @@ class CaseGenerationTests(unittest.TestCase):
             stl = root / "small model.stl"
             stl.write_text(TETRA_STL, encoding="ascii")
             stl.with_suffix(".repair.json").write_text('{"holes_filled": 1}\n', encoding="utf-8")
+            lineage = {
+                "scenario-draft.json": '{"scenario_id":"weapon-cfd-test"}\n',
+                "small model.geometry.json": '{"schema_version":1}\n',
+                "small model.georeference.json": '{"schema_version":1}\n',
+            }
+            for name, content in lineage.items():
+                (root / name).write_text(content, encoding="utf-8")
             report = analyse_stl(stl, run_external=False)
             config = CaseConfig(
                 case_name="testCase3D",
@@ -188,6 +195,18 @@ class CaseGenerationTests(unittest.TestCase):
             self.assertTrue(archive and archive.is_file())
             self.assertTrue((target / "0/p").is_file())
             self.assertTrue((target / "geometry-repair.json").is_file())
+            self.assertEqual(
+                (target / "weapon-scenario-draft.json").read_text(encoding="utf-8"),
+                lineage["scenario-draft.json"],
+            )
+            self.assertEqual(
+                (target / "weapon-geometry.json").read_text(encoding="utf-8"),
+                lineage["small model.geometry.json"],
+            )
+            self.assertEqual(
+                (target / "weapon-georeference.json").read_text(encoding="utf-8"),
+                lineage["small model.georeference.json"],
+            )
             self.assertTrue((target / "organizeSurfaceCheckOutput.sh").stat().st_mode & 0o111)
             self.assertIn("organizeSurfaceCheck", (target / "Allrun").read_text())
             self.assertTrue((target / "preflight.sh").stat().st_mode & 0o111)
@@ -203,6 +222,7 @@ class CaseGenerationTests(unittest.TestCase):
             self.assertIn("BLAST_HOST_UID", docker_job)
             self.assertNotIn("--package-only", docker_job)
             self.assertIn("BLAST_CASE_NAME", (target / "makeWebResults.sh").read_text())
+            self.assertIn("weapon-*.json", (target / "makeWebResults.sh").read_text())
             preflight = (target / "preflight.sh").read_text()
             self.assertIn("blastToVTK", preflight)
             self.assertIn("calculateImpulse", preflight)
@@ -272,6 +292,55 @@ class CaseGenerationTests(unittest.TestCase):
         self.assertIn("(5 5 1)", phase)
         self.assertRegex(phase, r"delays\s*\(\s*0\s+0\.001\s*\)")
         self.assertEqual(len(manifest["config"]["sources"]), 2)
+
+    def test_generates_supported_blastfoam_numerical_features(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stl = root / "model.stl"
+            stl.write_text(TETRA_STL, encoding="ascii")
+            report = analyse_stl(stl, run_external=False)
+            config = CaseConfig(
+                case_name="highOrderCase",
+                stl_path=str(stl),
+                domain_min=(-5, -5, 0),
+                domain_max=(8, 8, 8),
+                divisions=(13, 13, 8),
+                location_in_mesh=(-3, -3, 1),
+                charge_centre=(3, 3, 1),
+                charge_mass=0.1,
+                charge_refinement_level=7,
+                probes=[(4, 3, 1)],
+                snappy_max_cells=100_000,
+                dynamic_max_cells=200_000,
+                mpi_ranks=2,
+                flux_scheme="HLLC",
+                time_integrator="RK4SSP",
+                spatial_order=3,
+            )
+            target, _, _ = create_case(config, root / "out", report, DEFAULT_TEMPLATE, False)
+            schemes = (target / "system/fvSchemes").read_text(encoding="utf-8")
+            manifest = json.loads((target / "case-builder.json").read_text(encoding="utf-8"))
+        self.assertIn("fluxScheme      HLLC;", schemes)
+        self.assertIn("timeIntegrator  RK4SSP;", schemes)
+        self.assertIn("reconstruct(rho)    quadraticMUSCL Minmod;", schemes)
+        self.assertIn("reconstruct(U)      quadraticMUSCL Minmod;", schemes)
+        self.assertEqual(manifest["config"]["spatial_order"], 3)
+
+    def test_rejects_unknown_numerical_runtime_types(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            stl = Path(directory) / "model.stl"
+            stl.write_text(TETRA_STL, encoding="ascii")
+            report = analyse_stl(stl, run_external=False)
+            config = CaseConfig(
+                stl_path=str(stl),
+                flux_scheme="notCompiled",
+                time_integrator="notCompiled",
+                spatial_order=4,
+            )
+            errors, _ = validate_config(config, report)
+        self.assertTrue(any("flux scheme" in error for error in errors))
+        self.assertTrue(any("time integrator" in error for error in errors))
+        self.assertTrue(any("spatial order" in error for error in errors))
 
     def test_rejects_overlapping_multiple_charges(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

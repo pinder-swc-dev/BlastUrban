@@ -39,7 +39,7 @@ if [[ ${1:-} != --package-only ]]; then
         --model-label "$case_name · calculated blastFoam fields"
 fi
 
-for file in server-job-status.json case-builder.json geometry-repair.json; do
+for file in server-job-status.json case-builder.json geometry-repair.json weapon-*.json; do
     [[ ! -f $file ]] || cp "$file" results-web/
 done
 if [[ -f log.blastFoam ]]; then

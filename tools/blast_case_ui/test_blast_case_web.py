@@ -14,8 +14,10 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from blast_case_web import (
+    AppState,
     HTML_PATH,
     Handler,
     IMAGE_READY_CHECK,
@@ -98,6 +100,15 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(sources[1].centre, (5.0, 6.0, 7.0))
         self.assertEqual(sources[1].mass, 8.0)
         self.assertEqual(sources[1].delay, 0.002)
+
+    def test_ui_exposes_only_supported_blastfoam_numerical_features(self) -> None:
+        html = HTML_PATH.read_text(encoding="utf-8")
+        for element_id in ("flux_scheme", "time_integrator", "spatial_order"):
+            self.assertIn(f'id="{element_id}"', html)
+            self.assertRegex(html, rf"const ids = \[[\s\S]*'{element_id}'")
+        for runtime_type in ("Tadmor", "Kurganov", "HLLC", "AUSM+", "RK1SSP", "RK4SSP"):
+            self.assertIn(f'value="{runtime_type}"', html)
+        self.assertIn("quadratic MUSCL/Minmod", html)
 
     def test_model_preview_uses_the_available_desktop_height(self) -> None:
         html = HTML_PATH.read_text(encoding="utf-8")
@@ -562,6 +573,26 @@ class RunnerContractTests(unittest.TestCase):
         self.assertEqual(STATE.ssh_control_dir.stat().st_mode & 0o777, 0o700)
         self.assertIn("ControlMaster=auto", first)
         self.assertIn("ControlPersist=60", first)
+
+    def test_shutdown_survives_second_ctrl_c_and_kills_stuck_ssh_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, mock.patch(
+            "blast_case_web.DEFAULT_WORKSPACE", Path(directory)
+        ):
+            state = AppState()
+            upload_dir = state.upload_dir
+            socket_path = state.ssh_control_dir / "cm-shutdown-test"
+            socket_path.touch()
+            state.ssh_masters[("192.0.2.10", "tester", 22, "/tmp/test-key")] = socket_path
+            process = mock.Mock()
+            process.wait.side_effect = [KeyboardInterrupt(), None]
+            process.poll.return_value = None
+            with mock.patch("blast_case_web.subprocess.Popen", return_value=process):
+                state.close()
+            process.kill.assert_called_once_with()
+            self.assertFalse(socket_path.exists())
+            self.assertFalse(upload_dir.exists())
+            # A repeated server_close() must remain a harmless no-op.
+            state.close()
 
     def test_image_cache_is_keyed_by_image_id_and_reversible(self) -> None:
         source = (Path(__file__).with_name("blast_case_web.py")).read_text(encoding="utf-8")

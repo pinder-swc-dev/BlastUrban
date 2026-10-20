@@ -274,9 +274,12 @@
         <label>ก้าวเวลาเริ่มต้น (s)<input id="delta_t" type="number" step="any" value="5e-8"></label>
         <label>ก้าวเวลาสูงสุด (s)<input id="max_delta_t" type="number" step="any" value="2e-6"></label>
         <label>ค่าคุมความเสถียร<input id="max_co" type="number" step="any" value="0.3"></label>
+        <label>Shock flux<select id="flux_scheme"><option value="Tadmor" selected>Tadmor — ค่าเดิมที่รับรอง</option><option value="Kurganov">Kurganov</option><option value="HLLC">HLLC</option><option value="AUSM+">AUSM+</option></select></label>
+        <label>Time integrator<select id="time_integrator"><option value="RK1SSP">RK1SSP — 1st order</option><option value="RK2SSP" selected>RK2SSP — 2nd order</option><option value="RK3SSP">RK3SSP — 3rd order</option><option value="RK4SSP">RK4SSP — 4th order</option></select></label>
+        <label>Spatial reconstruction<select id="spatial_order"><option value="2" selected>2nd order — van Albada</option><option value="3">3rd order — quadratic MUSCL/Minmod</option></select></label>
         <label>แรงดันอากาศเริ่มต้น (Pa)<input id="ambient_pressure" type="number" step="any" value="101298"></label>
         <label>แรงดันแนวคลื่น (Pa)<input id="iso_pressure" type="number" step="any" value="110000"></label>
-      </div><div class="checks"><label><input id="binary" type="checkbox" checked>บันทึก Field แบบประหยัดพื้นที่</label></div></div></details>
+      </div><div class="checks"><label><input id="binary" type="checkbox" checked>บันทึก Field แบบประหยัดพื้นที่</label></div><p class="hint">ตัวเลือก flux/time/spatial มาจาก runtime types และ tutorial ของ blastFoam รุ่นใน repository นี้ การเปลี่ยน numerics ต้องสร้าง Case ใหม่และทำ mesh/time-step convergence ก่อนใช้ผลทางวิศวกรรม</p></div></details>
       <p class="hint">Balanced Fast เหมาะกับ screening และ Web 3D: ใช้ maxCo เดิม แต่ mesh หยาบกว่า reference; benchmark จริงพบค่า peak ที่ probes ต่าง 11–26% จึงควรใช้ Quality/ทำ mesh-convergence เมื่อต้องใช้ค่าทางวิศวกรรม</p>
     </section>
   </div></div>
@@ -408,7 +411,7 @@
     'surface_min','surface_max','feature_level','snappy_cells','dynamic_cells','dynamic_levels','refine_interval',
     'location_x','location_y','location_z','charge_x','charge_y','charge_z','mass','source_delay','density','charge_level',
     'plane_x','plane_y','plane_z','probes','end_time','delta_t','max_delta_t','max_co','write_interval',
-    'mpi','ambient_pressure','iso_pressure','performance_profile','case_name','output'
+    'mpi','ambient_pressure','iso_pressure','performance_profile','flux_scheme','time_integrator','spatial_order','case_name','output'
   ];
   const checks = ['binary','archive','allow_surface_errors'];
   let uploadedFileKey = '';
@@ -1069,7 +1072,7 @@
   ['preview_style','show_grid','show_domain','show_source','show_probes'].forEach(id=>el(id).addEventListener('change',drawPreview));
   el('performance_profile').addEventListener('change',()=>applyPerformanceProfile(true));
   el('end_time').addEventListener('input',()=>{const profile=value('performance_profile');if(profile==='fast')syncOutputCadence(48);else if(profile==='quality')syncOutputCadence(96);updateCharge();});
-  ['snappy_cells','dynamic_cells','dynamic_levels','refine_interval','max_delta_t','write_interval'].forEach(id=>el(id).addEventListener('change',()=>el('performance_profile').value='custom'));
+  ['snappy_cells','dynamic_cells','dynamic_levels','refine_interval','max_delta_t','write_interval','flux_scheme','time_integrator','spatial_order'].forEach(id=>el(id).addEventListener('change',()=>el('performance_profile').value='custom'));
   el('scale').addEventListener('input',schedulePreviewReload); el('stl_path').addEventListener('change',schedulePreviewReload); el('stl_file').addEventListener('change',importSelectedModel);
   const canvas=el('model_preview');
   canvas.addEventListener('pointerdown',event=>{if(preview.placingSource){placeSourceFromPointer(event);return;}preview.drag=true;preview.lastX=event.clientX;preview.lastY=event.clientY;canvas.classList.add('dragging');canvas.setPointerCapture(event.pointerId);});

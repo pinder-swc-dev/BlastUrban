@@ -124,6 +124,7 @@ doc/Doxygen/DTAGS
 *.tar.gz.sha256
 **/__pycache__/
 **/*.pyc
+**/.pytest_cache/
 
 # Generated copies and rendered documentation
 /tutorials/blastFoam/building3DWorkshop/townRun/

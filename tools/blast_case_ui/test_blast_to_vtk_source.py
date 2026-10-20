@@ -1,4 +1,6 @@
 import ast
+import hashlib
+import json
 import math
 import re
 import tempfile
@@ -36,7 +38,7 @@ class CompactVisualizationSourceTests(unittest.TestCase):
             node for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name == name
         )
-        namespace = {"math": math, "re": re}
+        namespace = {"hashlib": hashlib, "json": json, "math": math, "Path": Path, "re": re}
         exec(compile(ast.Module(body=[function], type_ignores=[]), str(EXPORTER), "exec"), namespace)
         return namespace[name]
 
@@ -73,6 +75,43 @@ class CompactVisualizationSourceTests(unittest.TestCase):
             )
             self.assertEqual(resolve(case), expected)
 
+    def test_result_lineage_checks_scenario_geometry_and_georeference(self) -> None:
+        lineage = self._exporter_function("result_lineage")
+        with tempfile.TemporaryDirectory() as temporary:
+            case = Path(temporary)
+            stl = case / "case.stl"
+            stl.write_bytes(b"calculated geometry")
+            georeference = case / "weapon-georeference.json"
+            georeference.write_text('{"schema_version":1}\n', encoding="utf-8")
+            stl_hash = hashlib.sha256(stl.read_bytes()).hexdigest()
+            georeference_hash = hashlib.sha256(georeference.read_bytes()).hexdigest()
+            geometry = {
+                "schema_version": 1,
+                "files": [
+                    {"name": "buildings.stl", "sha256": stl_hash},
+                    {"name": "buildings.georeference.json", "sha256": georeference_hash},
+                ],
+            }
+            (case / "weapon-geometry.json").write_text(json.dumps(geometry), encoding="utf-8")
+            (case / "weapon-scenario-draft.json").write_text(
+                json.dumps({
+                    "schema_version": 1,
+                    "scenario_id": "weapon-cfd-test",
+                    "geometry": {
+                        "stl": "buildings.stl",
+                        "georeference_manifest": "buildings.georeference.json",
+                    },
+                }),
+                encoding="utf-8",
+            )
+            result = lineage(case, stl)
+            self.assertEqual(result["scenario_id"], "weapon-cfd-test")
+            self.assertEqual(result["geometry_sha256"], stl_hash)
+            self.assertEqual(result["georeference_sha256"], georeference_hash)
+            georeference.write_text('{"schema_version":1,"changed":true}\n', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "georeference checksum"):
+                lineage(case, stl)
+
     def test_exporter_uses_real_pressure_slices_and_shared_wall_geometry(self) -> None:
         source = EXPORTER.read_text(encoding="utf-8")
         self.assertIn("postProcessing/pressureSlices/overpressure_", source)
@@ -83,6 +122,9 @@ class CompactVisualizationSourceTests(unittest.TestCase):
         self.assertIn("def wave_overpressure", source)
         self.assertIn('wave["op"] = wave_overpressure', source)
         self.assertIn('"ambientPressureKPa"', source)
+        self.assertIn('"result_schema_version": 1', source)
+        self.assertIn('json_output = output.with_suffix(".json")', source)
+        self.assertIn('data.update(result_lineage(case, stl_path))', source)
         self.assertIn("def blast_sources(case):", source)
         self.assertIn('"blastCenters": charge_centres', source)
         self.assertIn('"blastSources": sources', source)

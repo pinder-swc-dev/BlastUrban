@@ -7,3 +7,9 @@
 !tools/
 !tools/blast_case_ui/
 !tools/blast_case_ui/Dockerfile.server-web
+
+# Defensive exclusions if the allow-list above is broadened later.
+**/.DS_Store
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/

@@ -26,7 +26,7 @@ blastFoam is a solver for multi-component compressible flow with application to 
 
 ## How to use blastFoam
 
-Several validation and tutorial cases are included in the repository, and are documented in the [blastFoam User Guide](blastFoam_User_Guide.pdf).
+Several validation and tutorial cases are included in the repository, and are documented in the [blastFoam User Guide archived at commit 12fd72e3](https://github.com/pinder-swc-dev/BlastUrban/blob/12fd72e3/BlastFoam_User_Guide.pdf).
 
 
 
@@ -99,7 +99,7 @@ BiBTex:
 ```
 
 ## User Guide
-To cite the [blastFoam User Guide](blastFoam_User_Guide.pdf).:
+To cite the [blastFoam User Guide archived at commit 12fd72e3](https://github.com/pinder-swc-dev/BlastUrban/blob/12fd72e3/BlastFoam_User_Guide.pdf):
 ```
 J. Heylmun, P. Vonk, and T. Brewer, “blastFoam User Guide.” Synthetik Applied Technologies, LLC., 13-Apr-2020.
 ```
@@ -208,7 +208,7 @@ Joachim, Charles E., Gordon W. McMahon, Christo V. Lunderman, and Sharon B. Garn
 
 Validation against experimental and simulated (CTH) data as reported in Joachim et. al.; see the paper for an explanation of scaling.
 
-![Joachim validation case (scaled)](media/pressureScaledTimePawm.gif)
+[Archived Joachim validation animation](https://github.com/pinder-swc-dev/BlastUrban/blob/12fd72e3/media/pressureScaledTimePawm.gif)
 
 
 
@@ -219,7 +219,7 @@ Reference:
 M. E. Beyer, “Blast Loads Behind Vertical Walls,” Naval Civil Engineering Laboratory, Port Hueneme, CA, USA, AD-A181 274, 1986.
 ```
 
-![Blast Wall Case](media/blastWallwm.gif)
+[Archived Blast Wall animation](https://github.com/pinder-swc-dev/BlastUrban/blob/12fd72e3/media/blastWallwm.gif)
 
 
 
@@ -236,5 +236,3 @@ Verification and validation results as compared to those published by Zheng et. 
 
 
 ![Verification plots compared with Zheng](media/zheng-blastfoam-validation.png)
-
-
