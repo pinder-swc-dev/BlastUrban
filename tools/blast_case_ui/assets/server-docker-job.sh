@@ -546,16 +546,34 @@ stage = {
     "stopped": "stopped",
 }.get(str(status.get("state")), "preparing")
 
+stage_logs = {
+    "log.surfaceFeatures": "surface_features",
+    "log.blockMesh": "base_mesh",
+    "log.checkMesh.base": "base_mesh_check",
+    "log.decomposePar": "decompose_mesh",
+    "log.snappyHexMesh": "snappy_mesh",
+    "log.checkMesh.snapped": "snapped_mesh_check",
+    "log.addEmptyPatch": "boundary_patches",
+    "log.setRefinedFields": "initializing",
+    "log.blastFoam": "solving",
+    "log.blastToVTK.ground": "converting_ground",
+    "log.blastToVTK.walls": "converting_walls",
+    "log.calculateImpulse": "calculating_impulse",
+}
+existing_stage_logs = []
+for name, name_stage in stage_logs.items():
+    path = os.path.join(case_dir, name)
+    try:
+        existing_stage_logs.append((os.path.getmtime(path), name, name_stage))
+    except OSError:
+        pass
+latest_log = max(existing_stage_logs, default=(None, None, None))
 blast_log = os.path.join(case_dir, "log.blastFoam")
 if status.get("state") == "running":
-    if os.path.isfile(blast_log):
-        stage = "solving"
-    elif os.path.isfile(os.path.join(case_dir, "log.setRefinedFields")):
-        stage = "initializing"
-    elif os.path.isfile(os.path.join(case_dir, "log.snappyHexMesh")):
-        stage = "meshing"
+    if latest_log[2]:
+        stage = latest_log[2]
 
-progress = {"stage": stage, "elapsed_seconds": elapsed}
+progress = {"stage": stage, "elapsed_seconds": elapsed, "active_log": latest_log[1]}
 if stage == "complete":
     progress.update({"fraction": 1.0, "eta_seconds": 0.0, "confidence": "actual"})
 elif stage == "solving":

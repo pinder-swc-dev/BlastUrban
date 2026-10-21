@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -231,6 +232,38 @@ class RunnerContractTests(unittest.TestCase):
         self.assertAlmostEqual(status["progress"]["fraction"], 0.5)
         self.assertAlmostEqual(status["progress"]["eta_seconds"], 20.0)
         self.assertGreaterEqual(status["progress"]["elapsed_seconds"], 29)
+
+    def test_runner_reports_the_latest_openfoam_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            case = Path(directory)
+            runner = case / "server-docker-job.sh"
+            shutil.copy2(ASSETS / "server-docker-job.sh", runner)
+            (case / "log.snappyHexMesh").write_text("End\n", encoding="utf-8")
+            time.sleep(0.01)
+            (case / "log.addEmptyPatch").write_text("Create time\n", encoding="utf-8")
+            started = datetime.now(timezone.utc).isoformat()
+            (case / "server-job-status.json").write_text(
+                json.dumps(
+                    {
+                        "state": "running",
+                        "message": "Docker is meshing or calculating blastFoam",
+                        "created_utc": started,
+                        "state_started_utc": started,
+                        "updated_utc": started,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            process = subprocess.run(
+                ["bash", str(runner), "status"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            status = json.loads(process.stdout)
+        self.assertEqual(status["progress"]["stage"], "boundary_patches")
+        self.assertEqual(status["progress"]["active_log"], "log.addEmptyPatch")
 
     def test_ubuntu2204_worker_build_contract(self) -> None:
         dockerfile = WORKER_DOCKERFILE.read_text(encoding="utf-8")
